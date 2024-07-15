@@ -10,7 +10,8 @@ import requests
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, Bot, ParseMode
 from telegram.ext import Updater, CommandHandler, CallbackContext, CallbackQueryHandler, Filters, MessageHandler, \
     ConversationHandler
-from solona import create_wallet, get_wallet_balance
+from solona import create_wallet, get_wallet_balance, send_sol
+from dexscreener import get_token_details
 import config
 import qrcode
 from io import BytesIO
@@ -44,6 +45,15 @@ gas_fees = {
 
 mev = ["Secure", "Turbo"]
 trans_priority = ['Medium', 'High', 'Very High']
+
+
+def convert_number_to_k_m(number):
+    if number >= 1000000:
+        return f"{number / 1000000:.1f}M"
+    elif number >= 1000:
+        return f"{number / 1000:.1f}K"
+    else:
+        return str(number)
 
 
 def generate_qr_code(data: str) -> BytesIO:
@@ -131,7 +141,7 @@ def start(update: Update, context: CallbackContext) -> None:
 
     public_key, secret_key = create_wallet()
     context.user_data["public_key"] = public_key
-    context.user_data["private_key"] = secret_key.hex()
+    context.user_data["private_key"] = secret_key
     context.user_data["balance"] = get_wallet_balance(public_key)
     print('balance ', get_wallet_balance(public_key))
 
@@ -195,7 +205,7 @@ def home(update: Update, context: CallbackContext) -> None:
         "For more info on your Memebot wallet and to retrieve your private key, tap the wallet button below. User funds are perfectly safe on Memebot, but if you expose your private key we can't protect you! Please copy and save your private key at a secure place and never share it with anyone."
     )
 
-    balance = context.user_data.get('balance', "0.0")
+    balance = context.user_data["balance"]
 
     msg2 = (
         f"*Welcome to Memebot!*\n\n"
@@ -305,7 +315,7 @@ def handle_wallets(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
 
     public_key = context.user_data.get('public_key')
-    balance = context.user_data["balance", "0.0"]
+    balance = context.user_data["balance"]
     keyboard = [
         [InlineKeyboardButton("View on Solscan", url=f"https://solscan.io/account/{public_key}"),
          InlineKeyboardButton("Deposit Sol", callback_data="deposit")],
@@ -313,7 +323,7 @@ def handle_wallets(update: Update, context: CallbackContext) -> None:
          InlineKeyboardButton("Withdraw X SOL", callback_data="withdraw_x")],
         [InlineKeyboardButton("Export Private Key", callback_data=f"export_secret"),
          InlineKeyboardButton("Reset Wallet", callback_data=f"reset_wallet")],
-        [InlineKeyboardButton("Refresh", callback_data=f"refresh")],
+        [InlineKeyboardButton("Refresh", callback_data=f"refresh_wallet")],
         [InlineKeyboardButton("Close", callback_data=f"close")]
     ]
 
@@ -322,6 +332,35 @@ def handle_wallets(update: Update, context: CallbackContext) -> None:
         f"*Your Wallet*:\n\n Address: `{public_key}`\nBalance: {balance}\n\n Tap to copy the address and send SOL to deposit")
     query.message.reply_text(msgV2,
                              reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
+
+
+def handle_wallet_refresh(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+
+    public_key = context.user_data.get('public_key')
+    balance = context.user_data["balance"]
+    updated_balance = get_wallet_balance(public_key)
+    print('refresh balance', updated_balance, 'previous balance', balance)
+
+    keyboard = [
+        [InlineKeyboardButton("View on Solscan", url=f"https://solscan.io/account/{public_key}"),
+         InlineKeyboardButton("Deposit Sol", callback_data="deposit")],
+        [InlineKeyboardButton("Withdraw all SOL", callback_data="withdraw_all"),
+         InlineKeyboardButton("Withdraw X SOL", callback_data="withdraw_x")],
+        [InlineKeyboardButton("Export Private Key", callback_data=f"export_secret"),
+         InlineKeyboardButton("Reset Wallet", callback_data=f"reset_wallet")],
+        [InlineKeyboardButton("Refresh", callback_data=f"refresh_wallet")],
+        [InlineKeyboardButton("Close", callback_data=f"close")]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if updated_balance != balance:
+        context.user_data["balance"] = updated_balance
+        msgV2 = escape_markdown_v2(
+            f"*Your Wallet*:\n\n Address: `{public_key}`\nBalance: {updated_balance}\n\n Tap to copy the address and send SOL to deposit")
+        query.edit_message_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
 
 
 def generate_settings_keyboard(context: CallbackContext):
@@ -588,34 +627,42 @@ def handle_withdraw(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     query.answer()
 
-    if query.data == 'withdraw_x':
-        public_key = context.user_data.get('public_key')
-        context.user_data['withdraw_type'] = 'partial'
+    balance = context.user_data["balance"]
+
+    if balance > 0:
+        if query.data == 'withdraw_x':
+            public_key = context.user_data.get('public_key')
+            context.user_data['withdraw_type'] = 'partial'
+            query.message.reply_text(
+                f"Reply with the amount to withdraw (0 - {balance})"
+            )
+            return AMOUNT
+        elif query.data == 'withdraw_all':
+            context.user_data['withdraw_type'] = 'all'
+            query.message.reply_text(
+                "Reply with the destination address"
+            )
+            return ADDRESS
+    else:
         query.message.reply_text(
-            "Reply with the amount to withdraw (0 - 0.032852169)"
+            "You have No Balance to Withdraw"
         )
-        return AMOUNT
-    elif query.data == 'withdraw_all':
-        context.user_data['withdraw_type'] = 'all'
-        query.message.reply_text(
-            "Reply with the destination address"
-        )
-        return ADDRESS
 
 
 # Handler for capturing the amount to withdraw
 def handle_amount(update: Update, context: CallbackContext) -> None:
     amount = update.message.text
+    balance = context.user_data["balance"]
     try:
         amount = float(amount)
-        if 0 <= amount <= 0.032852169:
+        if 0 <= amount <= balance:
             context.user_data['withdraw_amount'] = amount
             update.message.reply_text(
                 "Reply with the destination address"
             )
             return ADDRESS
         else:
-            update.message.reply_text("Invalid amount. Please enter a value between 0 and 0.032852169.")
+            update.message.reply_text(f"Invalid amount. Please enter a value between 0 and {balance}.")
             return AMOUNT
     except ValueError:
         update.message.reply_text("Invalid amount. Please enter a numeric value.")
@@ -623,25 +670,32 @@ def handle_amount(update: Update, context: CallbackContext) -> None:
 
 
 # Handler for capturing the destination address and performing the transaction
-def handle_address(update: Update, context: CallbackContext) -> None:
-    address = update.message.text
+def handle_address(update: Update, context: CallbackContext) -> int:
+    to_address = update.message.text
     withdraw_type = context.user_data.get('withdraw_type')
+    private_key = context.user_data.get('private_key')
+    resp = ''
+    amount = 0
 
     if withdraw_type == 'partial':
         amount = context.user_data.get('withdraw_amount')
-        # Perform the transaction using the amount and address
-        # Example: perform_transaction(amount, address)
-        update.message.reply_text(f"Transaction initiated for {amount} to address {address}.")
     elif withdraw_type == 'all':
-        # Perform the transaction to withdraw all funds to the address
-        # Example: perform_transaction('all', address)
-        update.message.reply_text(f"Transaction initiated to withdraw all funds to address {address}.")
+        amount = context.user_data["balance"]
+
+    update.message.reply_text(f"Transaction initiated for {amount} SOL to address {to_address}.")
+    resp = send_sol(private_key, to_address, float(amount))
+    print(resp)
+
+    if resp["result"]:
+        update.message.reply_text(f"Transaction is Sucessful !\n https://solscan.io/tx/{resp['result']}")
+    else:
+        update.message.reply_text(f"Transaction failed. \n Please Try again")
 
     return ConversationHandler.END
 
 
 # Handler for cancelling the conversation
-def cancel(update: Update, context: CallbackContext) -> None:
+def cancel(update: Update, context: CallbackContext) -> int:
     update.message.reply_text("Withdrawal process cancelled.")
     return ConversationHandler.END
 
@@ -691,7 +745,7 @@ def button_click(update: Update, context: CallbackContext) -> None:
 
         if public_key and secret_key:
             context.user_data["public_key"] = public_key
-            context.user_data["private_key"] = secret_key.hex()
+            context.user_data["private_key"] = secret_key
             query.message.reply_text(
                 f"*Sucess*\n\nYour new wallet is:\n`{public_key}`\n\nYou can now send SOL to this address to deposit into your new wallet\.",
                 parse_mode=ParseMode.MARKDOWN_V2)
@@ -707,6 +761,48 @@ def delete_message(context: CallbackContext) -> None:
     context.bot.delete_message(chat_id=chat_id, message_id=message_id)
 
 
+def handle_message(update: Update, context: CallbackContext):
+    address = update.message.text
+    token_details = get_token_details(address)
+
+    autobuy_amt = context.user_data["autobuy_amt"]
+    balance = context.user_data["balance"]
+    autobuy_enabled = context.user_data["autobuy_enabled"]
+
+    buy_left = context.user_data["buy_left"]
+    buy_right = context.user_data["buy_right"]
+
+    if autobuy_enabled and float(autobuy_amt) > float(balance):
+        update.message.reply_text(
+            f"Auto Buy amount ({autobuy_amt} SOL) is greater than your wallet balance ({balance} SOL). Please disable Auto Buy or lower the amount.")
+    else:
+        if token_details == {}:
+            update.message.reply_text(
+                f"Token not found.Make sure address ({address}) is correct.\n\n You can enter  any Solana token listed on https://dexscreener.com ")
+        else:
+            msg = (
+                f"{token_details['symbol']} | *{token_details['symbol']}*\n"
+                f"`{address}`\n\n"
+                f"Price: *${token_details['price']}*\n"
+                f"5m: *{token_details['priceChange']['m5']}%*, 1h: *{token_details['priceChange']['h1']}%*, 6h: *{token_details['priceChange']['h6']}%*, 24h: *{token_details['priceChange']['h24']}%*\n"
+                f"Market Cap: *${convert_number_to_k_m(token_details['marketCap'])}*\n\n"
+                f"wallet balance: *{balance} SOL*\n\n"
+                "To buy press one of the buttons below."
+            )
+            msgV2 = escape_markdown_v2(msg)
+            keyboard = [
+                [InlineKeyboardButton("Cancel", callback_data=f"close")],
+                [InlineKeyboardButton("View on Solscan", url=f"https://solscan.io/account/{address}"),
+                 InlineKeyboardButton("View on Dexscreener", url=f"https://dexscreener.com/solana/{address}")]
+                , [InlineKeyboardButton(f"Buy {buy_left} SOL", callback_data=f"buy_left"),
+                   InlineKeyboardButton(f"Buy {buy_right} SOL", callback_data=f"buy_right"),
+                   InlineKeyboardButton("Buy X SOL", callback_data=f"buy_x")],
+                [InlineKeyboardButton("Refresh", callback_data=f"refresh")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            update.message.reply_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
+
+
 def main() -> None:
     updater = Updater(token=TELEGRAM_BOT_TOKEN)
 
@@ -719,9 +815,12 @@ def main() -> None:
     dp.add_handler(CommandHandler("referrals", referrals))
 
     dp.add_handler(CallbackQueryHandler(handle_wallets, pattern=r'wallet'))
+    dp.add_handler(CallbackQueryHandler(handle_wallet_refresh, pattern=r'refresh_wallet'))
     dp.add_handler(CallbackQueryHandler(referrals, pattern=r'referrals'))
     dp.add_handler(CallbackQueryHandler(settings, pattern=r'settings'))
     dp.add_handler(CallbackQueryHandler(help, pattern=r'help'))
+
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
 
     settings_conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(edit_settings_button,
