@@ -15,8 +15,9 @@ def get_wallet_balance(public_key_str):
     client = Client("https://api.mainnet-beta.solana.com")
     public_key = PublicKey(public_key_str)
     balance = client.get_balance(public_key)['result']['value']
+    balance_sol = balance/1000000000
 
-    return balance
+    return balance_sol
 
 if __name__ == "__main__":
     public_key, secret_key = create_wallet()
