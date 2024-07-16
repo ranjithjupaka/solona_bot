@@ -334,6 +334,44 @@ def handle_wallets(update: Update, context: CallbackContext) -> None:
                              reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
 
 
+def handle_token_refresh(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+
+    address = context.user_data['token_address']
+    token_details = get_token_details(address)
+    prev_token_details = context.user_data['token_details']
+    print('prev',prev_token_details,'updated',token_details)
+    balance = context.user_data["balance"]
+
+    buy_left = context.user_data["buy_left"]
+    buy_right = context.user_data["buy_right"]
+
+    if prev_token_details != token_details:
+
+        msg = (
+            f"{token_details['symbol']} | *{token_details['symbol']}*\n"
+            f"`{address}`\n\n"
+            f"Price: *${token_details['price']}*\n"
+            f"5m: *{token_details['priceChange']['m5']}%*, 1h: *{token_details['priceChange']['h1']}%*, 6h: *{token_details['priceChange']['h6']}%*, 24h: *{token_details['priceChange']['h24']}%*\n"
+            f"Market Cap: *${convert_number_to_k_m(token_details['marketCap'])}*\n\n"
+            f"wallet balance: *{balance} SOL*\n\n"
+            "To buy press one of the buttons below."
+        )
+        msgV2 = escape_markdown_v2(msg)
+        keyboard = [
+            [InlineKeyboardButton("Cancel", callback_data=f"close")],
+            [InlineKeyboardButton("View on Solscan", url=f"https://solscan.io/account/{address}"),
+             InlineKeyboardButton("View on Dexscreener", url=f"https://dexscreener.com/solana/{address}")]
+            , [InlineKeyboardButton(f"Buy {buy_left} SOL", callback_data=f"buy_left"),
+               InlineKeyboardButton(f"Buy {buy_right} SOL", callback_data=f"buy_right"),
+               InlineKeyboardButton("Buy X SOL", callback_data=f"buy_x")],
+            [InlineKeyboardButton("Refresh", callback_data=f"refresh_token")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
+
+
 def handle_wallet_refresh(update: Update, context: CallbackContext):
     query = update.callback_query
     query.answer()
@@ -686,7 +724,7 @@ def handle_address(update: Update, context: CallbackContext) -> int:
     resp = send_sol(private_key, to_address, float(amount))
     print(resp)
 
-    if resp["result"]:
+    if resp.value:
         update.message.reply_text(f"Transaction is Sucessful !\n https://solscan.io/tx/{resp['result']}")
     else:
         update.message.reply_text(f"Transaction failed. \n Please Try again")
@@ -763,7 +801,10 @@ def delete_message(context: CallbackContext) -> None:
 
 def handle_message(update: Update, context: CallbackContext):
     address = update.message.text
+    context.user_data['token_address'] = address
+
     token_details = get_token_details(address)
+    context.user_data['token_details'] = token_details
 
     autobuy_amt = context.user_data["autobuy_amt"]
     balance = context.user_data["balance"]
@@ -797,7 +838,7 @@ def handle_message(update: Update, context: CallbackContext):
                 , [InlineKeyboardButton(f"Buy {buy_left} SOL", callback_data=f"buy_left"),
                    InlineKeyboardButton(f"Buy {buy_right} SOL", callback_data=f"buy_right"),
                    InlineKeyboardButton("Buy X SOL", callback_data=f"buy_x")],
-                [InlineKeyboardButton("Refresh", callback_data=f"refresh")]
+                [InlineKeyboardButton("Refresh", callback_data=f"refresh_token")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             update.message.reply_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
@@ -821,6 +862,7 @@ def main() -> None:
     dp.add_handler(CallbackQueryHandler(help, pattern=r'help'))
 
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    dp.add_handler(CallbackQueryHandler(handle_token_refresh, pattern=r'refresh_token'))
 
     settings_conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(edit_settings_button,

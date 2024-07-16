@@ -4,16 +4,14 @@ import json
 
 from solana.rpc.core import RPCException
 from solders import message
-from solders.pubkey import Pubkey
 from solders.keypair import Keypair
-from solders.rpc.errors import SendTransactionPreflightFailureMessage
 from solders.transaction import VersionedTransaction
 
 from solana.rpc.types import TxOpts
 from solana.rpc.async_api import AsyncClient
 from solana.rpc.commitment import Processed
 
-from jupiter_python_sdk.jupiter import Jupiter, Jupiter_DCA
+from jupiter_python_sdk.jupiter import Jupiter
 import asyncio
 
 
@@ -51,7 +49,7 @@ async def check_transaction_confirmation(async_client, signature, max_retries=3,
     return False
 
 
-async def main():
+async def trade(input_token,output_token,amount,slippage):
     key_pair = Keypair.from_bytes(
         base58.b58decode("5bdtULrZt9MaMS7YHk3UP2UMnppe9MbzJAHHCBHWZCTXD6wL9PrTAgN4E3jpxFm6Ew2WfgbdnCGGWJBruRQ5tepq"))
 
@@ -70,10 +68,10 @@ async def main():
 
         try:
             transaction_data = await jupiter.swap(
-                input_mint="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-                output_mint="So11111111111111111111111111111111111111112",
-                amount=159300,
-                slippage_bps=50,
+                input_mint=input_token,
+                output_mint=output_token,
+                amount=amount,
+                slippage_bps=slippage,
             )
             print('data', transaction_data)
 
@@ -90,14 +88,14 @@ async def main():
 
             print("Waiting for transaction confirmation...")
 
-            # Check for transaction confirmation
-            confirmed = await check_transaction_confirmation(async_client, transaction_id)
-
-            if confirmed:
-                print("Transaction successfully confirmed!")
-                # You can add additional logic here for post-confirmation actions
-            else:
-                print("Failed to confirm transaction within the specified time.")
+            # # Check for transaction confirmation
+            # confirmed = await check_transaction_confirmation(async_client, transaction_id)
+            #
+            # if confirmed:
+            #     print("Transaction successfully confirmed!")
+            #     # You can add additional logic here for post-confirmation actions
+            # else:
+            #     print("Failed to confirm transaction within the specified time.")
 
         except RPCException as rpc_error:
             print(f"RPC Error occurred: {rpc_error.args[0]}")
@@ -106,5 +104,6 @@ async def main():
             print(f"An error occurred: {e}")
 
 
-if __name__ == "__main__":
-    asyncio.run(main())
+# if __name__ == "__main__":
+#     asyncio.run(trade("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v","So11111111111111111111111111111111111111112", 774400, 100))
+
