@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import random
@@ -10,11 +11,23 @@ import requests
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, Bot, ParseMode
 from telegram.ext import Updater, CommandHandler, CallbackContext, CallbackQueryHandler, Filters, MessageHandler, \
     ConversationHandler
-from solona import create_wallet, get_wallet_balance, send_sol
+from solona import create_wallet, get_wallet_balance, send_sol, get_token_balance
 from dexscreener import get_token_details
 import config
 import qrcode
 from io import BytesIO
+
+import os
+import sys
+import site
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+libs_dir = os.path.join(current_dir, 'libs')
+
+activate_this = os.path.join(libs_dir, 'venv', 'Scripts', 'activate_this.py')
+exec(open(activate_this).read(), {'__file__': activate_this})
+
+from libs.jupiter import trade
 
 # Enable logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -24,9 +37,11 @@ logger = logging.getLogger(__name__)
 # Replace with your Telegram bot token and chat ID
 TELEGRAM_BOT_TOKEN = config.TELEGRAM_BOT_TOKEN
 BOT_LINK = config.BOT_LINK
+SOLONA_ADDRESS = "So11111111111111111111111111111111111111112"
 
 AMOUNT, ADDRESS = range(2)
 AUTOBUY_AMT, BUY_LEFT, BUY_RIGHT, SELL_LEFT, SELL_RIGHT, BUY_SLIPPAGE, SELL_SLIPPAGE, MAX_PRICE_IMPACT = range(8)
+BUY_AMOUNT = range(1)
 
 refs = {
     'user1': ['ref1', 'ref2'],
@@ -192,6 +207,9 @@ def start(update: Update, context: CallbackContext) -> None:
 
 def home(update: Update, context: CallbackContext) -> None:
     public_key = context.user_data.get('public_key')
+    balance = context.user_data["balance"]
+    tokens_data = get_token_balance(public_key)
+    print(tokens_data)
 
     msg1 = (
         f"*Welcome to Memebot!*\n\n"
@@ -204,8 +222,6 @@ def home(update: Update, context: CallbackContext) -> None:
         "To buy a token just enter a ticker,token's contract address, or paste a Dexscreener URL, and you will see a Buy dashboard pop up where you can choose how much you want to buy.\n\n"
         "For more info on your Memebot wallet and to retrieve your private key, tap the wallet button below. User funds are perfectly safe on Memebot, but if you expose your private key we can't protect you! Please copy and save your private key at a secure place and never share it with anyone."
     )
-
-    balance = context.user_data["balance"]
 
     msg2 = (
         f"*Welcome to Memebot!*\n\n"
@@ -228,7 +244,20 @@ def home(update: Update, context: CallbackContext) -> None:
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    if float(balance) > 0:
+    if tokens_data and len(tokens_data) > 0:
+        msg3 = "*Positions Overview!*\n\n"
+        count = 1
+        for token in tokens_data:
+            token_details = get_token_details(token['token_address'])
+
+            if token_details != {}:
+                networth = float(token_details['price']) * float(token['Amount'])
+                msg3 = msg3+f"{count}. {token_details['name']}\n`{token['token_address']}`\n\nPrice: *${token_details['price']}*\n5m: *{token_details['priceChange']['m5']}%*, 1h: *{token_details['priceChange']['h1']}%*, 6h: *{token_details['priceChange']['h6']}%*, 24h: *{token_details['priceChange']['h24']}%*\nMarket Cap: *${convert_number_to_k_m(token_details['marketCap'])}*\n\nToken balance: *{token['Amount']} {token_details['symbol']}*\nNetworth: *${networth}*"
+                count = count+1
+
+        msgV2 = escape_markdown_v2(msg3)
+        update.message.reply_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
+    elif float(balance) > 0:
         msgV2 = escape_markdown_v2(msg2)
         update.message.reply_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
     else:
@@ -341,14 +370,13 @@ def handle_token_refresh(update: Update, context: CallbackContext):
     address = context.user_data['token_address']
     token_details = get_token_details(address)
     prev_token_details = context.user_data['token_details']
-    print('prev',prev_token_details,'updated',token_details)
+    print('prev', prev_token_details, 'updated', token_details)
     balance = context.user_data["balance"]
 
     buy_left = context.user_data["buy_left"]
     buy_right = context.user_data["buy_right"]
 
     if prev_token_details != token_details:
-
         msg = (
             f"{token_details['symbol']} | *{token_details['symbol']}*\n"
             f"`{address}`\n\n"
@@ -426,8 +454,8 @@ def generate_settings_keyboard(context: CallbackContext):
         ],
         [InlineKeyboardButton("---BUY BUTTONS CONFIG---", callback_data='autobuy')],
         [
-            InlineKeyboardButton(f"✏️ Left: {buy_left} SOL", callback_data='buy_left'),
-            InlineKeyboardButton(f"✏️ Right: {buy_right} SOL", callback_data='buy_right')
+            InlineKeyboardButton(f"✏️ Left: {buy_left} SOL", callback_data='edit_buy_left'),
+            InlineKeyboardButton(f"✏️ Right: {buy_right} SOL", callback_data='edit_buy_right')
         ],
         [InlineKeyboardButton("---SELL BUTTONS CONFIG---", callback_data='autobuy')],
         [
@@ -573,10 +601,10 @@ def edit_settings_button(update: Update, context: CallbackContext):
     if query.data == 'autobuy_amt':
         query.message.reply_text(text="Enter new autobuy amount: (in SOL)\n Example:0.005")
         return AUTOBUY_AMT
-    elif query.data == 'buy_left':
+    elif query.data == 'edit_buy_left':
         query.message.reply_text(text="Enter new buy left amount: (in SOL)\n Example:0.005")
         return BUY_LEFT
-    elif query.data == 'buy_right':
+    elif query.data == 'edit_buy_right':
         query.message.reply_text(text="Enter new buy right amount: (in SOL)\n Example:0.005")
         return BUY_RIGHT
     elif query.data == 'sell_left':
@@ -613,7 +641,6 @@ def change_buy_left(update: Update, context: CallbackContext):
 
 
 def change_buy_right(update: Update, context: CallbackContext):
-    global buy_right
     buy_right = float(update.message.text)
     context.user_data["buy_right"] = buy_right
     update.message.reply_text(f"Buy right amount updated to {buy_right} SOL.")
@@ -666,8 +693,9 @@ def handle_withdraw(update: Update, context: CallbackContext) -> None:
     query.answer()
 
     balance = context.user_data["balance"]
+    msg = "⚠️You have under 0.000005 SOL in your account. Please add more to pay the Solana blockchain fee.⚠️"
 
-    if balance > 0:
+    if balance > 0.000005:
         if query.data == 'withdraw_x':
             public_key = context.user_data.get('public_key')
             context.user_data['withdraw_type'] = 'partial'
@@ -681,10 +709,12 @@ def handle_withdraw(update: Update, context: CallbackContext) -> None:
                 "Reply with the destination address"
             )
             return ADDRESS
-    else:
+    elif 0.000005 > balance > 0:
         query.message.reply_text(
-            "You have No Balance to Withdraw"
+            msg
         )
+    else:
+        query.message.reply_text("You have No balance to Withdraw")
 
 
 # Handler for capturing the amount to withdraw
@@ -725,7 +755,7 @@ def handle_address(update: Update, context: CallbackContext) -> int:
     print(resp)
 
     if resp.value:
-        update.message.reply_text(f"Transaction is Sucessful !\n https://solscan.io/tx/{resp['result']}")
+        update.message.reply_text(f"Transaction is Sucessful !\n https://solscan.io/tx/{resp.value}")
     else:
         update.message.reply_text(f"Transaction failed. \n Please Try again")
 
@@ -812,17 +842,39 @@ def handle_message(update: Update, context: CallbackContext):
 
     buy_left = context.user_data["buy_left"]
     buy_right = context.user_data["buy_right"]
+    buy_slip = context.user_data["buy_slip"]
 
-    if autobuy_enabled and float(autobuy_amt) > float(balance):
-        update.message.reply_text(
-            f"Auto Buy amount ({autobuy_amt} SOL) is greater than your wallet balance ({balance} SOL). Please disable Auto Buy or lower the amount.")
+    if autobuy_enabled:
+        if float(autobuy_amt) >= float(balance):
+            update.message.reply_text(
+                f"Auto Buy amount ({autobuy_amt} SOL) is greater than your wallet balance ({balance} SOL). Please disable Auto Buy or lower the amount.")
+        else:
+            if token_details == {}:
+                update.message.reply_text(
+                    f"Token not found.Make sure address ({address}) is correct.\n\n You can enter  any Solana token listed on https://dexscreener.com ")
+            else:
+                update.message.reply_text(
+                    f"Auto Buy Enabled\n\nInitiating Buy of {token_details['name']} for {autobuy_amt} SOL")
+
+                amount = int(autobuy_amt * 1000000000)
+                slippage = int(buy_slip * 100)
+                result = asyncio.run(trade(SOLONA_ADDRESS, address, amount, slippage))
+
+                if result:
+                    update.message.reply_text(
+                        f"Swap Successful:\n\nBought {token_details['name']} for {autobuy_amt} SOL")
+                else:
+                    update.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
+
+
     else:
         if token_details == {}:
             update.message.reply_text(
                 f"Token not found.Make sure address ({address}) is correct.\n\n You can enter  any Solana token listed on https://dexscreener.com ")
         else:
+
             msg = (
-                f"{token_details['symbol']} | *{token_details['symbol']}*\n"
+                f"{token_details['name']} | *{token_details['symbol']}*\n"
                 f"`{address}`\n\n"
                 f"Price: *${token_details['price']}*\n"
                 f"5m: *{token_details['priceChange']['m5']}%*, 1h: *{token_details['priceChange']['h1']}%*, 6h: *{token_details['priceChange']['h6']}%*, 24h: *{token_details['priceChange']['h24']}%*\n"
@@ -844,6 +896,58 @@ def handle_message(update: Update, context: CallbackContext):
             update.message.reply_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
 
 
+def handle_buy(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+
+    buy_slippage = int(context.user_data["buy_slip"] * 100)
+    buy_left = context.user_data["buy_left"]
+    buy_right = context.user_data["buy_right"]
+
+    token_details = context.user_data['token_details']
+    tkn_name = token_details['name']
+    tkn_address = token_details['address']
+
+    if query.data == 'buy_left':
+        query.message.reply_text(f"Initiating Buy of {tkn_name} for {buy_left} SOL")
+
+        amount = int(buy_left * 1000000000)
+        result = asyncio.run(trade(SOLONA_ADDRESS, tkn_address, amount, 60))
+
+        if result:
+            query.message.reply_text(f"Swap Successful:\n\nBought {tkn_name} for {buy_left} SOL")
+        else:
+            query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
+    elif query.data == 'buy_right':
+        query.message.reply_text(f"Initiating Buy of {tkn_name} for {buy_right} SOL")
+
+        amount = int(buy_right * 1000000000)
+        result = asyncio.run(trade(SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
+        if result:
+            query.message.reply_text(f"Swap Successful:\n\nBought {tkn_name} for {buy_right} SOL")
+        else:
+            query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
+
+
+def handle_buy_amount(update: Update, context: CallbackContext) -> None:
+    amount = update.message.text
+    balance = context.user_data["balance"]
+    try:
+        amount = float(amount)
+        if 0 <= amount <= balance:
+            context.user_data['withdraw_amount'] = amount
+            update.message.reply_text(
+                "Reply with the destination address"
+            )
+            return ADDRESS
+        else:
+            update.message.reply_text(f"Invalid amount. Please enter a value between 0 and {balance}.")
+            return AMOUNT
+    except ValueError:
+        update.message.reply_text("Invalid amount. Please enter a numeric value.")
+        return AMOUNT
+
+
 def main() -> None:
     updater = Updater(token=TELEGRAM_BOT_TOKEN)
 
@@ -860,13 +964,21 @@ def main() -> None:
     dp.add_handler(CallbackQueryHandler(referrals, pattern=r'referrals'))
     dp.add_handler(CallbackQueryHandler(settings, pattern=r'settings'))
     dp.add_handler(CallbackQueryHandler(help, pattern=r'help'))
-
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
     dp.add_handler(CallbackQueryHandler(handle_token_refresh, pattern=r'refresh_token'))
+
+    buy_conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(handle_buy, pattern=r'^(buy_left|buy_right)$')],
+        states={
+            BUY_AMOUNT: [MessageHandler(Filters.text & ~Filters.command, handle_buy_amount)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+
+    dp.add_handler(buy_conv_handler)
 
     settings_conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(edit_settings_button,
-                                           pattern='^(autobuy_amt|buy_left|buy_right|sell_left|sell_right|buy_slippage|sell_slippage|maxprice_impact)$')],
+                                           pattern='^(autobuy_amt|edit_buy_left|edit_buy_right|sell_left|sell_right|buy_slippage|sell_slippage|maxprice_impact)$')],
         states={
             AUTOBUY_AMT: [MessageHandler(Filters.text & ~Filters.command, change_autobuy_amt)],
             BUY_LEFT: [MessageHandler(Filters.text & ~Filters.command, change_buy_left)],
@@ -895,6 +1007,7 @@ def main() -> None:
 
     dp.add_handler(withdraw_conv_handler)
     dp.add_handler(CallbackQueryHandler(button_click))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
 
     # dp.add_handler(MessageHandler(Filters.text & ~Filters.command, receive_address))
     # dp.add_handler(CallbackQueryHandler(handle_rating, pattern=r'^give_rating_'))

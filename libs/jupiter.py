@@ -88,6 +88,8 @@ async def trade(input_token,output_token,amount,slippage):
 
             print("Waiting for transaction confirmation...")
 
+            return f"https://explorer.solana.com/tx/{transaction_id}"
+
             # # Check for transaction confirmation
             # confirmed = await check_transaction_confirmation(async_client, transaction_id)
             #
@@ -100,8 +102,10 @@ async def trade(input_token,output_token,amount,slippage):
         except RPCException as rpc_error:
             print(f"RPC Error occurred: {rpc_error.args[0]}")
             print(f"Error message: {rpc_error.args[0].message}")
+            return None
         except Exception as e:
             print(f"An error occurred: {e}")
+            return None
 
 
 # if __name__ == "__main__":
