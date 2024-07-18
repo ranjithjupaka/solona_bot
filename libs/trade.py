@@ -7,9 +7,9 @@ import site
 
 def get_result():
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    libs_dir = os.path.join(current_dir, 'libs')
+    libs_dir = os.path.join(current_dir, '')
 
-    activate_this = os.path.join(libs_dir, 'venv', 'Scripts', 'activate_this.py')
+    activate_this = os.path.join(libs_dir, '../venv', 'Scripts', 'activate_this.py')
     exec(open(activate_this).read(), {'__file__': activate_this})
 
     # Update sys.path

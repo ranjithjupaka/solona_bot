@@ -88,7 +88,7 @@ async def trade(input_token, output_token, amount, slippage):
 
             print("Waiting for transaction confirmation...")
 
-            return f"https://explorer.solana.com/tx/{transaction_id}"
+            return transaction_id
 
             # # Check for transaction confirmation
             # confirmed = await check_transaction_confirmation(async_client, transaction_id)
@@ -107,10 +107,9 @@ async def trade(input_token, output_token, amount, slippage):
             print(f"An error occurred: {e}")
             return None
 
-
-if __name__ == "__main__":
-    result = asyncio.run(
-        trade("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "So11111111111111111111111111111111111111112",
-              50000,
-              50))
-    print(result)
+# if __name__ == "__main__":
+#     result = asyncio.run(
+#         trade("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "So11111111111111111111111111111111111111112",
+#               50000,
+#               50))
+#     print(result)

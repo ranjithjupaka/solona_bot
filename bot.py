@@ -11,6 +11,8 @@ import requests
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, Bot, ParseMode
 from telegram.ext import Updater, CommandHandler, CallbackContext, CallbackQueryHandler, Filters, MessageHandler, \
     ConversationHandler
+
+from jupiter import trade
 from solona import create_wallet, get_wallet_balance, send_sol, get_token_balance
 from dexscreener import get_token_details
 import config
@@ -30,6 +32,7 @@ SOLONA_ADDRESS = "So11111111111111111111111111111111111111112"
 AMOUNT, ADDRESS = range(2)
 AUTOBUY_AMT, BUY_LEFT, BUY_RIGHT, SELL_LEFT, SELL_RIGHT, BUY_SLIPPAGE, SELL_SLIPPAGE, MAX_PRICE_IMPACT = range(8)
 BUY_AMOUNT = range(1)
+SELL_AMOUNT = range(1)
 
 refs = {
     'user1': ['ref1', 'ref2'],
@@ -181,7 +184,7 @@ def start(update: Update, context: CallbackContext) -> None:
 
     keyboard = [
         [InlineKeyboardButton("Buy", callback_data="buy"),
-         InlineKeyboardButton("Sell", callback_data="sell")],
+         InlineKeyboardButton("Sell & Manage", callback_data="sell")],
         [InlineKeyboardButton("Help", callback_data="help"),
          InlineKeyboardButton("Alerts", callback_data="alerts")],
         [InlineKeyboardButton("Refer Friends", callback_data="referrals"),
@@ -195,9 +198,17 @@ def start(update: Update, context: CallbackContext) -> None:
 
 def home(update: Update, context: CallbackContext) -> None:
     public_key = context.user_data.get('public_key')
-    balance = context.user_data["balance"]
+    balance = get_wallet_balance(public_key)
+    context.user_data["balance"] = balance
     tokens_data = get_token_balance(public_key)
     print(tokens_data)
+
+    message = ''
+
+    if update.message:
+        message = update.message
+    elif update.callback_query:
+        message = update.callback_query.message
 
     msg1 = (
         f"*Welcome to Memebot!*\n\n"
@@ -222,7 +233,7 @@ def home(update: Update, context: CallbackContext) -> None:
 
     keyboard = [
         [InlineKeyboardButton("Buy", callback_data="buy"),
-         InlineKeyboardButton("Sell", callback_data="sell")],
+         InlineKeyboardButton("Sell & Manage", callback_data="sell")],
         [InlineKeyboardButton("Help", callback_data="help"),
          InlineKeyboardButton("Alerts", callback_data="alerts")],
         [InlineKeyboardButton("Refer Friends", callback_data="referrals"),
@@ -234,26 +245,25 @@ def home(update: Update, context: CallbackContext) -> None:
 
     if tokens_data and len(tokens_data) > 0:
         msg3 = "*Positions Overview!*\n\n"
-        count = 1
-        for token in tokens_data:
+
+        for index, token in enumerate(tokens_data):
             token_details = get_token_details(token['token_address'])
 
             if token_details != {}:
-                networth = float(token_details['price']) * float(token['Amount'])
-                msg3 = msg3 + f"{count}. {token_details['name']}\n`{token['token_address']}`\n\nPrice: *${token_details['price']}*\n5m: *{token_details['priceChange']['m5']}%*, 1h: *{token_details['priceChange']['h1']}%*, 6h: *{token_details['priceChange']['h6']}%*, 24h: *{token_details['priceChange']['h24']}%*\nMarket Cap: *${convert_number_to_k_m(token_details['marketCap'])}*\n\nToken balance: *{token['Amount']} {token_details['symbol']}*\nNetworth: *${networth}*"
-                count = count + 1
+                networth = float(token_details['price']) * float(token['uiAmount'])
+                msg3 = msg3 + f"{index + 1}. {token_details['name']}\n`{token['token_address']}`\n\nPrice: *${token_details['price']}*\n5m: *{token_details['priceChange']['m5']}%*, 1h: *{token_details['priceChange']['h1']}%*, 6h: *{token_details['priceChange']['h6']}%*, 24h: *{token_details['priceChange']['h24']}%*\nMarket Cap: *${convert_number_to_k_m(token_details['marketCap'])}*\n\nToken balance: *{token['uiAmount']} {token_details['symbol']}*\nNetworth: *${networth}*\n\n"
 
         msgV2 = escape_markdown_v2(msg3)
-        update.message.reply_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
+        message.reply_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
     elif float(balance) > 0:
         msgV2 = escape_markdown_v2(msg2)
-        update.message.reply_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
+        message.reply_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
     else:
         msgV2 = escape_markdown_v2(msg1)
-        update.message.reply_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
+        message.reply_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
 
 
-def help(update: Update, context: CallbackContext) -> None:
+def handle_help(update: Update, context: CallbackContext) -> None:
     message = ''
     if update.message:
         message = update.message
@@ -332,7 +342,8 @@ def handle_wallets(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
 
     public_key = context.user_data.get('public_key')
-    balance = context.user_data["balance"]
+    balance = get_wallet_balance(public_key)
+
     keyboard = [
         [InlineKeyboardButton("View on Solscan", url=f"https://solscan.io/account/{public_key}"),
          InlineKeyboardButton("Deposit Sol", callback_data="deposit")],
@@ -359,7 +370,10 @@ def handle_token_refresh(update: Update, context: CallbackContext):
     token_details = get_token_details(address)
     prev_token_details = context.user_data['token_details']
     print('prev', prev_token_details, 'updated', token_details)
-    balance = context.user_data["balance"]
+
+    public_key = context.user_data.get('public_key')
+    balance = get_wallet_balance(public_key)
+    context.user_data["balance"] = balance
 
     buy_left = context.user_data["buy_left"]
     buy_right = context.user_data["buy_right"]
@@ -680,7 +694,10 @@ def handle_withdraw(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     query.answer()
 
-    balance = context.user_data["balance"]
+    public_key = context.user_data.get('public_key')
+    balance = get_wallet_balance(public_key)
+    context.user_data["balance"] = balance
+
     msg = "⚠️You have under 0.000005 SOL in your account. Please add more to pay the Solana blockchain fee.⚠️"
 
     if balance > 0.000005:
@@ -708,7 +725,11 @@ def handle_withdraw(update: Update, context: CallbackContext) -> None:
 # Handler for capturing the amount to withdraw
 def handle_amount(update: Update, context: CallbackContext) -> None:
     amount = update.message.text
-    balance = context.user_data["balance"]
+
+    public_key = context.user_data.get('public_key')
+    balance = get_wallet_balance(public_key)
+    context.user_data["balance"] = balance
+
     try:
         amount = float(amount)
         if 0 <= amount <= balance:
@@ -730,20 +751,21 @@ def handle_address(update: Update, context: CallbackContext) -> int:
     to_address = update.message.text
     withdraw_type = context.user_data.get('withdraw_type')
     private_key = context.user_data.get('private_key')
+    public_key = context.user_data.get('public_key')
     resp = ''
     amount = 0
 
     if withdraw_type == 'partial':
         amount = context.user_data.get('withdraw_amount')
     elif withdraw_type == 'all':
-        amount = context.user_data["balance"]
+        amount = get_wallet_balance(public_key)
 
     update.message.reply_text(f"Transaction initiated for {amount} SOL to address {to_address}.")
-    resp = send_sol(private_key, to_address, float(amount))
-    print(resp)
+    tx_id = send_sol(private_key, to_address, float(amount))
+    print(tx_id)
 
-    if resp.value:
-        update.message.reply_text(f"Transaction is Sucessful !\n https://solscan.io/tx/{resp.value}")
+    if tx_id:
+        update.message.reply_text(f"Transaction is Sucessful !\n https://solscan.io/tx/{tx_id}")
     else:
         update.message.reply_text(f"Transaction failed. \n Please Try again")
 
@@ -846,13 +868,13 @@ def handle_message(update: Update, context: CallbackContext):
 
                 amount = int(autobuy_amt * 1000000000)
                 slippage = int(buy_slip * 100)
-                # result = asyncio.run(trade(SOLONA_ADDRESS, address, amount, slippage))
+                result = asyncio.run(trade(SOLONA_ADDRESS, address, amount, slippage))
 
-                # if result:
-                #     update.message.reply_text(
-                #         f"Swap Successful:\n\nBought {token_details['name']} for {autobuy_amt} SOL")
-                # else:
-                #     update.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
+                if result:
+                    update.message.reply_text(
+                        f"Swap Successful:\n\nBought {token_details['name']} for {autobuy_amt} SOL")
+                else:
+                    update.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
 
 
     else:
@@ -884,6 +906,42 @@ def handle_message(update: Update, context: CallbackContext):
             update.message.reply_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
 
 
+def handle_sell(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+
+    sell_slippage = int(context.user_data["sell_slip"] * 100)
+    sell_left = float(context.user_data["sell_left"])/100
+    sell_right = float(context.user_data["sell_right"])/100
+
+    token_details = context.user_data['token_details']
+    tkn_symbol = token_details['symbol']
+    tkn_address = token_details['address']
+    tkn_amount = float(context.user_data['tkn_amount'])
+
+    if query.data == 'sell_left':
+        query.message.reply_text(f"Initiating SELL of {tkn_amount} {tkn_symbol} ")
+
+        amount = int(sell_left * tkn_amount)
+        transaction_id = asyncio.run(trade(tkn_address,SOLONA_ADDRESS, amount, sell_slippage))
+
+        if transaction_id:
+            query.message.reply_text(
+                f"Swap Successful:\n\nSold {amount} {tkn_symbol} \n\nhttps://solscan.io/tx/{transaction_id}")
+        else:
+            query.message.reply_text("Swap Failed! change the sell amount or slippage and try again")
+    elif query.data == 'sell_right':
+        query.message.reply_text(f"Initiating SELL of {tkn_amount} {tkn_symbol} ")
+
+        amount = int(sell_right * tkn_amount)
+        transaction_id = asyncio.run(trade(tkn_address,SOLONA_ADDRESS, amount, sell_slippage))
+        if transaction_id:
+            query.message.reply_text(
+                f"Swap Successful:\n\nSold {amount} {tkn_symbol} \n\nhttps://solscan.io/tx/{transaction_id}")
+        else:
+            query.message.reply_text("Swap Failed! change the sell amount or slippage and try again")
+
+
 def handle_buy(update: Update, context: CallbackContext):
     query = update.callback_query
     query.answer()
@@ -896,25 +954,28 @@ def handle_buy(update: Update, context: CallbackContext):
     tkn_name = token_details['name']
     tkn_address = token_details['address']
 
-    if query.data == 'buy_left':
+    if query.data == 'buy':
+        query.message.reply_text("To Buy a Token Enter Valid Solona Token Address from DexScreener")
+    elif query.data == 'buy_left':
         query.message.reply_text(f"Initiating Buy of {tkn_name} for {buy_left} SOL")
 
         amount = int(buy_left * 1000000000)
-        # result = asyncio.run(trade(SOLONA_ADDRESS, tkn_address, amount, 60))
-        #
-        # if result:
-        #     query.message.reply_text(f"Swap Successful:\n\nBought {tkn_name} for {buy_left} SOL")
-        # else:
-        #     query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
+        transaction_id = asyncio.run(trade(SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
+
+        if transaction_id:
+            query.message.reply_text(
+                f"Swap Successful:\n\nBought {tkn_name} for {buy_left} SOL \n\nhttps://solscan.io/tx/{transaction_id}")
+        else:
+            query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
     elif query.data == 'buy_right':
         query.message.reply_text(f"Initiating Buy of {tkn_name} for {buy_right} SOL")
 
         amount = int(buy_right * 1000000000)
-        # result = asyncio.run(trade(SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
-        # if result:
-        #     query.message.reply_text(f"Swap Successful:\n\nBought {tkn_name} for {buy_right} SOL")
-        # else:
-        #     query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
+        transaction_id = asyncio.run(trade(SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
+        if transaction_id:
+            query.message.reply_text(f"Swap Successful:\n\nBought {tkn_name} for {buy_right} SOL \n\nhttps://solscan.io/tx/{transaction_id}")
+        else:
+            query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
 
 
 def handle_buy_amount(update: Update, context: CallbackContext) -> None:
@@ -936,13 +997,92 @@ def handle_buy_amount(update: Update, context: CallbackContext) -> None:
         return AMOUNT
 
 
+def handle_manage(update: Update, context: CallbackContext):
+    query = update.callback_query
+    query.answer()
+    message = query.message
+
+    buy_left = context.user_data["buy_left"]
+    buy_right = context.user_data["buy_right"]
+    sell_left = context.user_data["sell_left"]
+    sell_right = context.user_data["sell_right"]
+
+    public_key = context.user_data.get('public_key')
+    tokens_data = get_token_balance(public_key)
+    print('tokens_data', tokens_data)
+    context.user_data['tokens_data'] = tokens_data
+
+    if tokens_data and len(tokens_data) > 0:
+        tokens_index = 0
+        edit = True
+        if query.data == 'sell':
+            tokens_index = 0
+            context.user_data['tokens_index'] = tokens_index
+        elif query.data == 'prev':
+            cur_index = context.user_data['tokens_index']
+
+            if cur_index == 0:
+                message.reply_text("This is the First Token in Open Positions")
+                edit = False
+            else:
+                tokens_index = context.user_data['tokens_index'] - 1
+                context.user_data['tokens_index'] = tokens_index
+        elif query.data == 'next':
+            cur_index = context.user_data['tokens_index']
+
+            if cur_index == len(tokens_data) - 1:
+                message.reply_text("This is the Last Token in Open Positions")
+                edit = False
+            else:
+                tokens_index = context.user_data['tokens_index'] + 1
+                context.user_data['tokens_index'] = tokens_index
+
+        if edit:
+            token_address = tokens_data[tokens_index]['token_address']
+            token_amount = tokens_data[tokens_index]['uiAmount']
+            context.user_data['tkn_amount'] = tokens_data[tokens_index]['amount']
+
+            keyboard = [
+                [InlineKeyboardButton("Home", callback_data=f"home"),
+                 InlineKeyboardButton("Cancel", callback_data=f"close")],
+                [InlineKeyboardButton("Prev ⬅️", callback_data=f"prev"),
+                 InlineKeyboardButton("Next ➡️", callback_data=f"next")],
+                [InlineKeyboardButton(f"Buy {buy_left} SOL", callback_data=f"buy_left"),
+                 InlineKeyboardButton(f"Buy {buy_right} SOL", callback_data=f"buy_right"),
+                 InlineKeyboardButton("Buy X SOL", callback_data=f"buy_x")],
+                [InlineKeyboardButton(f"Sell {sell_left} %", callback_data=f"sell_left"),
+                 InlineKeyboardButton(f"Sell {sell_right} %", callback_data=f"sell_right"),
+                 InlineKeyboardButton("Sell X %", callback_data=f"sell_x")],
+                [InlineKeyboardButton("View on Solscan", url=f"https://solscan.io/account/{token_address}"),
+                 InlineKeyboardButton("View on Dexscreener", url=f"https://dexscreener.com/solana/{token_address}")]
+                ,
+                [InlineKeyboardButton("Refresh", callback_data=f"refresh_token")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            token_details = get_token_details(token_address)
+            context.user_data['token_details'] = token_details
+
+            if token_details != {}:
+                networth = float(token_details['price']) * float(token_amount)
+                msg3 = f"{tokens_index + 1}. {token_details['name']}\n`{token_address}`\n\nPrice: *${token_details['price']}*\n5m: *{token_details['priceChange']['m5']}%*, 1h: *{token_details['priceChange']['h1']}%*, 6h: *{token_details['priceChange']['h6']}%*, 24h: *{token_details['priceChange']['h24']}%*\nMarket Cap: *${convert_number_to_k_m(token_details['marketCap'])}*\n\nToken balance: *{token_amount} {token_details['symbol']}*\nNetworth: *${networth}*\n\n"
+                msgV2 = escape_markdown_v2(msg3)
+
+                if query.data == 'sell':
+                    message.reply_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
+                else:
+                    query.edit_message_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
+    else:
+        message.reply_text(" You dont have any open positions")
+
+
 def main() -> None:
     updater = Updater(token=TELEGRAM_BOT_TOKEN)
 
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("home", home))
-    dp.add_handler(CommandHandler("help", help))
+    dp.add_handler(CommandHandler("help", handle_help))
     dp.add_handler(CommandHandler("settings", settings))
     dp.add_handler(CommandHandler("chat", chat))
     dp.add_handler(CommandHandler("referrals", referrals))
@@ -950,12 +1090,13 @@ def main() -> None:
     dp.add_handler(CallbackQueryHandler(handle_wallets, pattern=r'wallet'))
     dp.add_handler(CallbackQueryHandler(handle_wallet_refresh, pattern=r'refresh_wallet'))
     dp.add_handler(CallbackQueryHandler(referrals, pattern=r'referrals'))
+    dp.add_handler(CallbackQueryHandler(home,pattern=r'home'))
     dp.add_handler(CallbackQueryHandler(settings, pattern=r'settings'))
-    dp.add_handler(CallbackQueryHandler(help, pattern=r'help'))
+    dp.add_handler(CallbackQueryHandler(handle_help, pattern=r'help'))
     dp.add_handler(CallbackQueryHandler(handle_token_refresh, pattern=r'refresh_token'))
 
     buy_conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(handle_buy, pattern=r'^(buy_left|buy_right)$')],
+        entry_points=[CallbackQueryHandler(handle_buy, pattern=r'^(buy|buy_left|buy_right)$')],
         states={
             BUY_AMOUNT: [MessageHandler(Filters.text & ~Filters.command, handle_buy_amount)],
         },
@@ -963,6 +1104,18 @@ def main() -> None:
     )
 
     dp.add_handler(buy_conv_handler)
+
+    dp.add_handler(CallbackQueryHandler(handle_manage, pattern=r'^(sell|prev|next)$'))
+
+    sell_conv_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(handle_sell, pattern=r'^(sell_left|sell_right)$')],
+        states={
+            SELL_AMOUNT: [MessageHandler(Filters.text & ~Filters.command, handle_buy_amount)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+
+    dp.add_handler(sell_conv_handler)
 
     settings_conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(edit_settings_button,
