@@ -17,18 +17,6 @@ import config
 import qrcode
 from io import BytesIO
 
-import os
-import sys
-import site
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-libs_dir = os.path.join(current_dir, 'libs')
-
-activate_this = os.path.join(libs_dir, 'venv', 'Scripts', 'activate_this.py')
-exec(open(activate_this).read(), {'__file__': activate_this})
-
-from libs.jupiter import trade
-
 # Enable logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -252,8 +240,8 @@ def home(update: Update, context: CallbackContext) -> None:
 
             if token_details != {}:
                 networth = float(token_details['price']) * float(token['Amount'])
-                msg3 = msg3+f"{count}. {token_details['name']}\n`{token['token_address']}`\n\nPrice: *${token_details['price']}*\n5m: *{token_details['priceChange']['m5']}%*, 1h: *{token_details['priceChange']['h1']}%*, 6h: *{token_details['priceChange']['h6']}%*, 24h: *{token_details['priceChange']['h24']}%*\nMarket Cap: *${convert_number_to_k_m(token_details['marketCap'])}*\n\nToken balance: *{token['Amount']} {token_details['symbol']}*\nNetworth: *${networth}*"
-                count = count+1
+                msg3 = msg3 + f"{count}. {token_details['name']}\n`{token['token_address']}`\n\nPrice: *${token_details['price']}*\n5m: *{token_details['priceChange']['m5']}%*, 1h: *{token_details['priceChange']['h1']}%*, 6h: *{token_details['priceChange']['h6']}%*, 24h: *{token_details['priceChange']['h24']}%*\nMarket Cap: *${convert_number_to_k_m(token_details['marketCap'])}*\n\nToken balance: *{token['Amount']} {token_details['symbol']}*\nNetworth: *${networth}*"
+                count = count + 1
 
         msgV2 = escape_markdown_v2(msg3)
         update.message.reply_text(msgV2, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN_V2)
@@ -858,13 +846,13 @@ def handle_message(update: Update, context: CallbackContext):
 
                 amount = int(autobuy_amt * 1000000000)
                 slippage = int(buy_slip * 100)
-                result = asyncio.run(trade(SOLONA_ADDRESS, address, amount, slippage))
+                # result = asyncio.run(trade(SOLONA_ADDRESS, address, amount, slippage))
 
-                if result:
-                    update.message.reply_text(
-                        f"Swap Successful:\n\nBought {token_details['name']} for {autobuy_amt} SOL")
-                else:
-                    update.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
+                # if result:
+                #     update.message.reply_text(
+                #         f"Swap Successful:\n\nBought {token_details['name']} for {autobuy_amt} SOL")
+                # else:
+                #     update.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
 
 
     else:
@@ -912,21 +900,21 @@ def handle_buy(update: Update, context: CallbackContext):
         query.message.reply_text(f"Initiating Buy of {tkn_name} for {buy_left} SOL")
 
         amount = int(buy_left * 1000000000)
-        result = asyncio.run(trade(SOLONA_ADDRESS, tkn_address, amount, 60))
-
-        if result:
-            query.message.reply_text(f"Swap Successful:\n\nBought {tkn_name} for {buy_left} SOL")
-        else:
-            query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
+        # result = asyncio.run(trade(SOLONA_ADDRESS, tkn_address, amount, 60))
+        #
+        # if result:
+        #     query.message.reply_text(f"Swap Successful:\n\nBought {tkn_name} for {buy_left} SOL")
+        # else:
+        #     query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
     elif query.data == 'buy_right':
         query.message.reply_text(f"Initiating Buy of {tkn_name} for {buy_right} SOL")
 
         amount = int(buy_right * 1000000000)
-        result = asyncio.run(trade(SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
-        if result:
-            query.message.reply_text(f"Swap Successful:\n\nBought {tkn_name} for {buy_right} SOL")
-        else:
-            query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
+        # result = asyncio.run(trade(SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
+        # if result:
+        #     query.message.reply_text(f"Swap Successful:\n\nBought {tkn_name} for {buy_right} SOL")
+        # else:
+        #     query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
 
 
 def handle_buy_amount(update: Update, context: CallbackContext) -> None:

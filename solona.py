@@ -14,6 +14,14 @@ from solana.blockhash import Blockhash
 from base58 import b58decode
 from solana.rpc.commitment import Confirmed
 
+
+import os
+import sys
+import site
+
+
+
+
 token_balances = []
 
 
@@ -140,8 +148,9 @@ def send_sol(from_secret_key, to_public_key_str, amount_sol):
 # if __name__ == "__main__":
 #     data = get_token_balance("4u7gSZLu9hJf4GhFW9r4tHoTL47PuDwQtJ6euEmGtYWD")
 #     print(data)
-    #     asyncio.run(
-    #         trade("So11111111111111111111111111111111111111112","EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", 40000000,100))
+#
+#     result = get_result()
+#     print(result)
 
     # resp = send_sol("5bdtULrZt9MaMS7YHk3UP2UMnppe9MbzJAHHCBHWZCTXD6wL9PrTAgN4E3jpxFm6Ew2WfgbdnCGGWJBruRQ5tepq","HFC9JZVhr5QPBJ6fwFZcuJ4zKuwam9rjgQXaTBP5rj5x",0.006)
     # print(resp)
