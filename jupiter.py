@@ -49,9 +49,10 @@ async def check_transaction_confirmation(async_client, signature, max_retries=3,
     return False
 
 
-async def trade(input_token, output_token, amount, slippage):
+async def trade(private_key, input_token, output_token, amount, slippage):
+    print('args----', input_token, output_token, amount, slippage)
     key_pair = Keypair.from_bytes(
-        base58.b58decode("5bdtULrZt9MaMS7YHk3UP2UMnppe9MbzJAHHCBHWZCTXD6wL9PrTAgN4E3jpxFm6Ew2WfgbdnCGGWJBruRQ5tepq"))
+        base58.b58decode(private_key))
 
     async with AsyncClient("https://api.mainnet-beta.solana.com") as async_client:
         jupiter = Jupiter(
@@ -100,8 +101,27 @@ async def trade(input_token, output_token, amount, slippage):
             #     print("Failed to confirm transaction within the specified time.")
 
         except RPCException as rpc_error:
-            print(f"RPC Error occurred: {rpc_error.args[0]}")
-            print(f"Error message: {rpc_error.args[0].message}")
+            error_data = rpc_error.args[0]
+            print(f"RPC Error occurred: {error_data}")
+            print(f"Error message: {error_data.message}")
+
+            error_logs = error_data.data.logs if hasattr(error_data, 'data') and hasattr(error_data.data,
+                                                                                         'logs') else []
+
+            if "insufficient lamports" in ' '.join(error_logs).lower():
+                insufficient_lamports_log = next((log for log in error_logs if "insufficient lamports" in log.lower()),
+                                                 None)
+                if insufficient_lamports_log:
+                    print("Error: Insufficient SOL balance to complete the transaction.")
+                    print(f"Details: {insufficient_lamports_log}")
+                    # Extract the required and available lamports
+                    parts = insufficient_lamports_log.split()
+                    available = int(parts[3].rstrip(','))
+                    required = int(parts[5])
+                    shortfall = required - available
+                    msg = f"You need {shortfall} more lamports (approximately {shortfall / 1e9:.9f} SOL) to complete this transaction."
+                    print(msg)
+
             return None
         except Exception as e:
             print(f"An error occurred: {e}")

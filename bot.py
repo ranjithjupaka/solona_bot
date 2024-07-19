@@ -163,7 +163,7 @@ def start(update: Update, context: CallbackContext) -> None:
     context.user_data["sell_protection_enabled"] = False
     context.user_data["sell_left"] = 25
     context.user_data["sell_right"] = 100
-    context.user_data["buy_left"] = "0.030"
+    context.user_data["buy_left"] = "0.005"
     context.user_data["buy_right"] = "1.0"
     context.user_data["sell_slip"] = 5
     context.user_data["buy_slip"] = 2
@@ -749,9 +749,9 @@ def handle_amount(update: Update, context: CallbackContext) -> None:
 # Handler for capturing the destination address and performing the transaction
 def handle_address(update: Update, context: CallbackContext) -> int:
     to_address = update.message.text
-    withdraw_type = context.user_data.get('withdraw_type')
-    private_key = context.user_data.get('private_key')
-    public_key = context.user_data.get('public_key')
+    withdraw_type = context.user_data['withdraw_type']
+    private_key = context.user_data["private_key"]
+    public_key = context.user_data['public_key']
     resp = ''
     amount = 0
 
@@ -761,11 +761,12 @@ def handle_address(update: Update, context: CallbackContext) -> int:
         amount = get_wallet_balance(public_key)
 
     update.message.reply_text(f"Transaction initiated for {amount} SOL to address {to_address}.")
+    # print(private_key, to_address, float(amount))
     tx_id = send_sol(private_key, to_address, float(amount))
     print(tx_id)
 
     if tx_id:
-        update.message.reply_text(f"Transaction is Sucessful !\n https://solscan.io/tx/{tx_id}")
+        update.message.reply_text(f"Transaction is Successful !\n https://solscan.io/tx/{tx_id}")
     else:
         update.message.reply_text(f"Transaction failed. \n Please Try again")
 
@@ -799,7 +800,7 @@ def button_click(update: Update, context: CallbackContext) -> None:
     elif query.data == 'export_secret_confirm':
         private_key = context.user_data.get('private_key')
         message = query.message.reply_text(
-            f"Your Private Key is:\n\n `{private_key}` \n\n You can now import the key into a wallet like Phantum \(tap to copy\)\n\nThis message should auto\-delete in 1 minute\. If not, delete this message once you are done\.",
+            f"Your Private Key is:\n\n `{private_key}` \n\n You can now import the key into a wallet like Phantom \(tap to copy\)\n\nThis message should auto\-delete in 1 minute\. If not, delete this message once you are done\.",
             parse_mode=ParseMode.MARKDOWN_V2)
 
         context.job_queue.run_once(delete_message, 60, context=(message.chat_id, message.message_id))
@@ -817,7 +818,7 @@ def button_click(update: Update, context: CallbackContext) -> None:
     elif query.data == 'reset_wallet_confirm':
         private_key = context.user_data.get('private_key')
         query.message.reply_text(
-            f"Your *Private Key* for your *OLD* wallet is:\n\n {private_key}\n\n You can now import the key into a wallet like Phantum \(tap to copy\) \n\nSave this key in case you need to access this wallet again\.",
+            f"Your *Private Key* for your *OLD* wallet is:\n\n {private_key}\n\n You can now import the key into a wallet like Phantom \(tap to copy\) \n\nSave this key in case you need to access this wallet again\.",
             parse_mode=ParseMode.MARKDOWN_V2)
         public_key, secret_key = create_wallet()
 
@@ -846,13 +847,15 @@ def handle_message(update: Update, context: CallbackContext):
     token_details = get_token_details(address)
     context.user_data['token_details'] = token_details
 
-    autobuy_amt = context.user_data["autobuy_amt"]
+    autobuy_amt = float(context.user_data["autobuy_amt"])
     balance = context.user_data["balance"]
     autobuy_enabled = context.user_data["autobuy_enabled"]
 
-    buy_left = context.user_data["buy_left"]
-    buy_right = context.user_data["buy_right"]
-    buy_slip = context.user_data["buy_slip"]
+    buy_left = float(context.user_data["buy_left"])
+    buy_right = float(context.user_data["buy_right"])
+    buy_slip = int(float(context.user_data["buy_slip"]) * 100)
+
+    private_key = context.user_data["private_key"]
 
     if autobuy_enabled:
         if float(autobuy_amt) >= float(balance):
@@ -868,11 +871,12 @@ def handle_message(update: Update, context: CallbackContext):
 
                 amount = int(autobuy_amt * 1000000000)
                 slippage = int(buy_slip * 100)
-                result = asyncio.run(trade(SOLONA_ADDRESS, address, amount, slippage))
+                result = asyncio.run(trade(private_key, SOLONA_ADDRESS, address, amount, slippage))
+                print(result)
 
                 if result:
                     update.message.reply_text(
-                        f"Swap Successful:\n\nBought {token_details['name']} for {autobuy_amt} SOL")
+                        f"Swap Successful:\n\nBought {token_details['name']} for {autobuy_amt} SOL  \n\nhttps://solscan.io/tx/{result}")
                 else:
                     update.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
 
@@ -911,33 +915,38 @@ def handle_sell(update: Update, context: CallbackContext):
     query.answer()
 
     sell_slippage = int(context.user_data["sell_slip"] * 100)
-    sell_left = float(context.user_data["sell_left"])/100
-    sell_right = float(context.user_data["sell_right"])/100
+    sell_left = float(context.user_data["sell_left"]) / 100
+    sell_right = float(context.user_data["sell_right"]) / 100
 
     token_details = context.user_data['token_details']
     tkn_symbol = token_details['symbol']
     tkn_address = token_details['address']
     tkn_amount = float(context.user_data['tkn_amount'])
 
+    private_key = context.user_data["private_key"]
+
     if query.data == 'sell_left':
         query.message.reply_text(f"Initiating SELL of {tkn_amount} {tkn_symbol} ")
 
         amount = int(sell_left * tkn_amount)
-        transaction_id = asyncio.run(trade(tkn_address,SOLONA_ADDRESS, amount, sell_slippage))
+        result = asyncio.run(trade(private_key, tkn_address, SOLONA_ADDRESS, amount, sell_slippage))
+        print(result)
 
-        if transaction_id:
+        if result:
             query.message.reply_text(
-                f"Swap Successful:\n\nSold {amount} {tkn_symbol} \n\nhttps://solscan.io/tx/{transaction_id}")
+                f"Swap Successful:\n\nSold {amount} {tkn_symbol} \n\nhttps://solscan.io/tx/{result}")
         else:
             query.message.reply_text("Swap Failed! change the sell amount or slippage and try again")
     elif query.data == 'sell_right':
         query.message.reply_text(f"Initiating SELL of {tkn_amount} {tkn_symbol} ")
 
         amount = int(sell_right * tkn_amount)
-        transaction_id = asyncio.run(trade(tkn_address,SOLONA_ADDRESS, amount, sell_slippage))
-        if transaction_id:
+        result = asyncio.run(trade(private_key, tkn_address, SOLONA_ADDRESS, amount, sell_slippage))
+        print(result)
+
+        if result:
             query.message.reply_text(
-                f"Swap Successful:\n\nSold {amount} {tkn_symbol} \n\nhttps://solscan.io/tx/{transaction_id}")
+                f"Swap Successful:\n\nSold {amount} {tkn_symbol} \n\nhttps://solscan.io/tx/{result}")
         else:
             query.message.reply_text("Swap Failed! change the sell amount or slippage and try again")
 
@@ -947,35 +956,43 @@ def handle_buy(update: Update, context: CallbackContext):
     query.answer()
 
     buy_slippage = int(context.user_data["buy_slip"] * 100)
-    buy_left = context.user_data["buy_left"]
-    buy_right = context.user_data["buy_right"]
+    buy_left = float(context.user_data["buy_left"])
+    buy_right = float(context.user_data["buy_right"])
 
-    token_details = context.user_data['token_details']
-    tkn_name = token_details['name']
-    tkn_address = token_details['address']
+    private_key = context.user_data["private_key"]
 
     if query.data == 'buy':
         query.message.reply_text("To Buy a Token Enter Valid Solona Token Address from DexScreener")
-    elif query.data == 'buy_left':
-        query.message.reply_text(f"Initiating Buy of {tkn_name} for {buy_left} SOL")
+    else:
 
-        amount = int(buy_left * 1000000000)
-        transaction_id = asyncio.run(trade(SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
+        token_details = context.user_data['token_details']
+        tkn_name = token_details['name']
+        tkn_address = token_details['address']
 
-        if transaction_id:
-            query.message.reply_text(
-                f"Swap Successful:\n\nBought {tkn_name} for {buy_left} SOL \n\nhttps://solscan.io/tx/{transaction_id}")
-        else:
-            query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
-    elif query.data == 'buy_right':
-        query.message.reply_text(f"Initiating Buy of {tkn_name} for {buy_right} SOL")
+        if query.data == 'buy_left':
+            query.message.reply_text(f"Initiating Buy of {tkn_name} for {buy_left} SOL")
 
-        amount = int(buy_right * 1000000000)
-        transaction_id = asyncio.run(trade(SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
-        if transaction_id:
-            query.message.reply_text(f"Swap Successful:\n\nBought {tkn_name} for {buy_right} SOL \n\nhttps://solscan.io/tx/{transaction_id}")
-        else:
-            query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
+            amount = int(buy_left * 1000000000)
+            result = asyncio.run(trade(private_key, SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
+            print(result)
+
+            if result:
+                query.message.reply_text(
+                    f"Swap Successful:\n\nBought {tkn_name} for {buy_left} SOL \n\nhttps://solscan.io/tx/{result}")
+            else:
+                query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
+        elif query.data == 'buy_right':
+            query.message.reply_text(f"Initiating Buy of {tkn_name} for {buy_right} SOL")
+
+            amount = int(buy_right * 1000000000)
+            result = asyncio.run(trade(private_key, SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
+            print(result)
+
+            if result:
+                query.message.reply_text(
+                    f"Swap Successful:\n\nBought {tkn_name} for {buy_right} SOL \n\nhttps://solscan.io/tx/{result}")
+            else:
+                query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
 
 
 def handle_buy_amount(update: Update, context: CallbackContext) -> None:
@@ -1090,7 +1107,7 @@ def main() -> None:
     dp.add_handler(CallbackQueryHandler(handle_wallets, pattern=r'wallet'))
     dp.add_handler(CallbackQueryHandler(handle_wallet_refresh, pattern=r'refresh_wallet'))
     dp.add_handler(CallbackQueryHandler(referrals, pattern=r'referrals'))
-    dp.add_handler(CallbackQueryHandler(home,pattern=r'home'))
+    dp.add_handler(CallbackQueryHandler(home, pattern=r'home'))
     dp.add_handler(CallbackQueryHandler(settings, pattern=r'settings'))
     dp.add_handler(CallbackQueryHandler(handle_help, pattern=r'help'))
     dp.add_handler(CallbackQueryHandler(handle_token_refresh, pattern=r'refresh_token'))

@@ -12,10 +12,10 @@ def create_wallet():
     # Generate a new Solana keypair
     keypair = Keypair()
     public_key = keypair.public_key
-    secret_key = keypair.public_key
+    secret_key = keypair.private_key
     print(public_key, secret_key)
 
-    return public_key, secret_key
+    return "3RQ1yB5MZMf5WCed9TyDEbpZLA9ZHMBqNPqKP5QTxSQJ", "4ebYS83MWMV3FjQNfdNCYKAyPuujyQnTuhGX8j4v8E5hPhDEau3aqRvRiL9oMStoi29CfjpXsUp32HpARQpvZUve"
     # return "4u7gSZLu9hJf4GhFW9r4tHoTL47PuDwQtJ6euEmGtYWD", "5bdtULrZt9MaMS7YHk3UP2UMnppe9MbzJAHHCBHWZCTXD6wL9PrTAgN4E3jpxFm6Ew2WfgbdnCGGWJBruRQ5tepq"
 
 
@@ -76,6 +76,7 @@ def get_token_balance(public_key_str):
 
 def send_sol(from_secret_key, to_public_key, amount_sol):
     try:
+        print('args---',from_secret_key,to_public_key,amount_sol)
         sender = Keypair.from_private_key(from_secret_key)
         receiver = PublicKey(to_public_key)
         amount = int(amount_sol * 1000000000)
@@ -100,7 +101,8 @@ def send_sol(from_secret_key, to_public_key, amount_sol):
         print(e)
         return None
 
-
+# sender = Keypair.from_private_key("4ebYS83MWMV3FjQNfdNCYKAyPuujyQnTuhGX8j4v8E5hPhDEau3aqRvRiL9oMStoi29CfjpXsUp32HpARQpvZUve")
+# print(sender.public_key,sender.private_key)
 # fees = client.get_fees()
 # print(fees['value']['feeCalculator']['lamportsPerSignature'])
 # create_wallet()
@@ -109,5 +111,5 @@ def send_sol(from_secret_key, to_public_key, amount_sol):
 # wallet_bal = get_wallet_balance("4u7gSZLu9hJf4GhFW9r4tHoTL47PuDwQtJ6euEmGtYWD")
 # print(wallet_bal)
 
-# send_sol("5bdtULrZt9MaMS7YHk3UP2UMnppe9MbzJAHHCBHWZCTXD6wL9PrTAgN4E3jpxFm6Ew2WfgbdnCGGWJBruRQ5tepq",
+# send_sol("4ebYS83MWMV3FjQNfdNCYKAyPuujyQnTuhGX8j4v8E5hPhDEau3aqRvRiL9oMStoi29CfjpXsUp32HpARQpvZUve",
 #          "HFC9JZVhr5QPBJ6fwFZcuJ4zKuwam9rjgQXaTBP5rj5x", 0.004)
