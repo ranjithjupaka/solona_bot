@@ -16,7 +16,7 @@ def create_wallet():
     print(public_key, secret_key)
 
     return "3RQ1yB5MZMf5WCed9TyDEbpZLA9ZHMBqNPqKP5QTxSQJ", "4ebYS83MWMV3FjQNfdNCYKAyPuujyQnTuhGX8j4v8E5hPhDEau3aqRvRiL9oMStoi29CfjpXsUp32HpARQpvZUve"
-    # return "4u7gSZLu9hJf4GhFW9r4tHoTL47PuDwQtJ6euEmGtYWD", "5bdtULrZt9MaMS7YHk3UP2UMnppe9MbzJAHHCBHWZCTXD6wL9PrTAgN4E3jpxFm6Ew2WfgbdnCGGWJBruRQ5tepq"
+    # return "8v7Dk3F9LGxcYDUxwAAiSjxqB6zP1J1fegLcSThCkEGC", "5t8RF51xjnjBv1zxtEK6T6tzFd4zBdYqed9qHCHhmUPWEKXDwuwX5bxNnmFiNfLgUHxX6s4o7b7iwSr6SzE2gMpp"
 
 
 def get_wallet_balance(public_key_str):

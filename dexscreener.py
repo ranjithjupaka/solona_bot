@@ -10,7 +10,7 @@ def get_token_details(token_address):
         resp = response.json()
 
         if resp['pairs']:
-            # print(resp['pairs'][0])
+            print('token info', resp['pairs'][0])
             token_details['name'] = resp['pairs'][0]['baseToken']['name']
             token_details['symbol'] = resp['pairs'][0]['baseToken']['symbol']
             token_details['address'] = resp['pairs'][0]['baseToken']['address']
