@@ -145,9 +145,8 @@ def deduct_fees(private_key, input_token, amount):
         owner_fees = (estimated_sol * 0.05) / 1000000000
         print('owner_fees', owner_fees)
 
-        # result = send_sol(private_key, OWNER_ADDRESS, owner_fees)
-        # return result
-        return None
+        result = send_sol(private_key, OWNER_ADDRESS, owner_fees)
+        return result
 
 
 def start(update: Update, context: CallbackContext) -> None:

@@ -133,9 +133,7 @@ async def trade(private_key, input_token, output_token, amount, slippage):
 
             return {'err': True, 'msg': ''}
 
-# if __name__ == "__main__":
-#     result = asyncio.run(
-#         trade("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "So11111111111111111111111111111111111111112",
-#               50000,
-#               50))
-#     print(result)
+if __name__ == "__main__":
+    result = asyncio.run(
+        trade("caMzMckjmJxSUAHXgsjJPx9WvwbQXbYGwjixyyZvb2qgo3cvzLv3pdX8hVFpwAgteZGHD2A8Az5CPYvJ2xd32Ux ", "So11111111111111111111111111111111111111112","9Vv199SR7VKVqbJmM5LoT26ZtC9bzrmqqxE3b4dfrubX",5000000, 200))
+    print(result)
