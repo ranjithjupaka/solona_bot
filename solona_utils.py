@@ -15,8 +15,11 @@ def create_wallet():
     secret_key = keypair.private_key
     print(public_key, secret_key)
 
-    return "3RQ1yB5MZMf5WCed9TyDEbpZLA9ZHMBqNPqKP5QTxSQJ", "4ebYS83MWMV3FjQNfdNCYKAyPuujyQnTuhGX8j4v8E5hPhDEau3aqRvRiL9oMStoi29CfjpXsUp32HpARQpvZUve"
+    # return public_key, str(secret_key)
+
+    # return "3RQ1yB5MZMf5WCed9TyDEbpZLA9ZHMBqNPqKP5QTxSQJ", "4ebYS83MWMV3FjQNfdNCYKAyPuujyQnTuhGX8j4v8E5hPhDEau3aqRvRiL9oMStoi29CfjpXsUp32HpARQpvZUve"
     # return "8v7Dk3F9LGxcYDUxwAAiSjxqB6zP1J1fegLcSThCkEGC", "5t8RF51xjnjBv1zxtEK6T6tzFd4zBdYqed9qHCHhmUPWEKXDwuwX5bxNnmFiNfLgUHxX6s4o7b7iwSr6SzE2gMpp"
+    return "H8UfvQKjifLY9WJJ7sxdUWJF1txtrgW13k4bGS3Jf2gp", "caMzMckjmJxSUAHXgsjJPx9WvwbQXbYGwjixyyZvb2qgo3cvzLv3pdX8hVFpwAgteZGHD2A8Az5CPYvJ2xd32Ux"
 
 
 def get_wallet_balance(public_key_str):
@@ -76,15 +79,15 @@ def get_token_balance(public_key_str):
 
 def send_sol(from_secret_key, to_public_key, amount_sol):
     try:
-        print('args---',from_secret_key,to_public_key,amount_sol)
+        print('args---', from_secret_key, to_public_key, amount_sol)
         sender = Keypair.from_private_key(from_secret_key)
         receiver = PublicKey(to_public_key)
         amount = int(amount_sol * 1000000000)
         fees = client.get_fees()
         gas_fees = fees['value']['feeCalculator']['lamportsPerSignature']
         print(gas_fees)
-        trans_amount = amount-gas_fees
-        print('trans_amount',trans_amount)
+        trans_amount = amount - gas_fees
+        print('trans_amount', trans_amount)
 
         instruction = transfer(
             from_public_key=sender.public_key,
@@ -101,6 +104,7 @@ def send_sol(from_secret_key, to_public_key, amount_sol):
         print(e)
         return None
 
+
 # sender = Keypair.from_private_key("4ebYS83MWMV3FjQNfdNCYKAyPuujyQnTuhGX8j4v8E5hPhDEau3aqRvRiL9oMStoi29CfjpXsUp32HpARQpvZUve")
 # print(sender.public_key,sender.private_key)
 # fees = client.get_fees()
@@ -111,5 +115,5 @@ def send_sol(from_secret_key, to_public_key, amount_sol):
 # wallet_bal = get_wallet_balance("4u7gSZLu9hJf4GhFW9r4tHoTL47PuDwQtJ6euEmGtYWD")
 # print(wallet_bal)
 
-# send_sol("4ebYS83MWMV3FjQNfdNCYKAyPuujyQnTuhGX8j4v8E5hPhDEau3aqRvRiL9oMStoi29CfjpXsUp32HpARQpvZUve",
-#          "HFC9JZVhr5QPBJ6fwFZcuJ4zKuwam9rjgQXaTBP5rj5x", 0.004)
+# send_sol("caMzMckjmJxSUAHXgsjJPx9WvwbQXbYGwjixyyZvb2qgo3cvzLv3pdX8hVFpwAgteZGHD2A8Az5CPYvJ2xd32Ux",
+#          "4u7gSZLu9hJf4GhFW9r4tHoTL47PuDwQtJ6euEmGtYWD", 0.0005)

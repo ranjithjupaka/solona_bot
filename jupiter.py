@@ -16,10 +16,7 @@ from solana.rpc.commitment import Processed
 
 from jupiter_python_sdk.jupiter import Jupiter
 import asyncio
-import config
-from solona_utils import send_sol
 
-OWNER_ADDRESS = config.OWNER
 SOL_MINT = "So11111111111111111111111111111111111111112"
 
 
@@ -57,22 +54,6 @@ async def estimate_sol_for_tokens(
 async def trade(private_key, input_token, output_token, amount, slippage):
     print('args----', private_key, input_token, output_token, amount, slippage)
     key_pair = Keypair.from_bytes(base58.b58decode(private_key))
-
-    if input_token == SOL_MINT:
-        amount = int(amount * 0.95)
-        owner_fees = int(amount * 0.05) / 1000000000
-        result = send_sol(private_key, OWNER_ADDRESS, owner_fees)
-
-        if result is None:
-            return {'err': True, 'msg': "Try again Sometime later"}
-    else:
-        estimated_sol = await estimate_sol_for_tokens(input_token, amount)
-        owner_fees = int(estimated_sol * 0.05) / 1000000000
-
-        result = send_sol(private_key, OWNER_ADDRESS, owner_fees)
-
-        if result is None:
-            return {'err': True, 'msg': "Try again Sometime later"}
 
     async with AsyncClient("https://api.mainnet-beta.solana.com") as async_client:
         jupiter = Jupiter(
