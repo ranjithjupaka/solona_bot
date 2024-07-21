@@ -1,8 +1,11 @@
 import json
 
+import aiohttp
+import asyncio
 import requests
 from solathon.core.instructions import transfer
-from solathon import Client, Transaction, PublicKey, Keypair
+from solathon import Client, Transaction, PublicKey, Keypair, AsyncClient
+
 
 url = "https://api.mainnet-beta.solana.com"
 client = Client(url)
@@ -15,11 +18,11 @@ def create_wallet():
     secret_key = keypair.private_key
     print(public_key, secret_key)
 
-    # return public_key, str(secret_key)
+    return public_key, str(secret_key)
 
     # return "3RQ1yB5MZMf5WCed9TyDEbpZLA9ZHMBqNPqKP5QTxSQJ", "4ebYS83MWMV3FjQNfdNCYKAyPuujyQnTuhGX8j4v8E5hPhDEau3aqRvRiL9oMStoi29CfjpXsUp32HpARQpvZUve"
     # return "8v7Dk3F9LGxcYDUxwAAiSjxqB6zP1J1fegLcSThCkEGC", "5t8RF51xjnjBv1zxtEK6T6tzFd4zBdYqed9qHCHhmUPWEKXDwuwX5bxNnmFiNfLgUHxX6s4o7b7iwSr6SzE2gMpp"
-    return "H8UfvQKjifLY9WJJ7sxdUWJF1txtrgW13k4bGS3Jf2gp", "caMzMckjmJxSUAHXgsjJPx9WvwbQXbYGwjixyyZvb2qgo3cvzLv3pdX8hVFpwAgteZGHD2A8Az5CPYvJ2xd32Ux"
+    #return "H8UfvQKjifLY9WJJ7sxdUWJF1txtrgW13k4bGS3Jf2gp", "caMzMckjmJxSUAHXgsjJPx9WvwbQXbYGwjixyyZvb2qgo3cvzLv3pdX8hVFpwAgteZGHD2A8Az5CPYvJ2xd32Ux"
 
 
 def get_wallet_balance(public_key_str):
@@ -100,10 +103,10 @@ def send_sol(from_secret_key, to_public_key, amount_sol):
         result = client.send_transaction(transaction)
         print("Transaction response: ", result)
         return result
-    except Exception as e:
-        print(e)
-        return None
 
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        return None
 
 # sender = Keypair.from_private_key("4ebYS83MWMV3FjQNfdNCYKAyPuujyQnTuhGX8j4v8E5hPhDEau3aqRvRiL9oMStoi29CfjpXsUp32HpARQpvZUve")
 # print(sender.public_key,sender.private_key)

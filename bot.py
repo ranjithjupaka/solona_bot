@@ -31,7 +31,7 @@ OWNER_ADDRESS = config.OWNER
 
 SOLONA_ADDRESS = "So11111111111111111111111111111111111111112"
 
-AMOUNT, ADDRESS = range(2)
+AMOUNT, ADDRESS, REF_AMOUNT = range(3)
 AUTOBUY_AMT, BUY_LEFT, BUY_RIGHT, SELL_LEFT, SELL_RIGHT, BUY_SLIPPAGE, SELL_SLIPPAGE, MAX_PRICE_IMPACT = range(8)
 BUY_AMOUNT = range(1)
 SELL_AMOUNT = range(1)
@@ -42,7 +42,15 @@ refs = {
 }
 
 refcodes = {
-    'user1': 'abcd12'
+    'abcd12': 'user1'
+}
+
+ref_total_earnings = {
+    'user1': 0
+}
+
+ref_earnings_balance = {
+    'user1': 0
 }
 
 gas_fees = {
@@ -133,20 +141,25 @@ def escape_markdown_v2(text):
     return escaped_text
 
 
-def deduct_fees(private_key, input_token, amount):
+def deduct_fees(private_key, input_token, amount, ref_username=None):
     print("deduct fees args----", private_key, input_token, amount)
+    owner_fees = 0
+
     if input_token == SOLONA_ADDRESS:
         owner_fees = (amount * 0.05) / 1000000000
         print('owner_fees', owner_fees)
-        result = send_sol(private_key, OWNER_ADDRESS, owner_fees)
-        return result
     else:
         estimated_sol = asyncio.run(estimate_sol_for_tokens(input_token, amount))
         owner_fees = (estimated_sol * 0.05) / 1000000000
         print('owner_fees', owner_fees)
 
-        result = send_sol(private_key, OWNER_ADDRESS, owner_fees)
-        return result
+    if ref_username is not None:
+        ref_total_earnings[ref_username] = ref_total_earnings[ref_username] + owner_fees * 0.05 * 0.25
+        ref_earnings_balance[ref_username] = ref_earnings_balance[ref_username] + owner_fees * 0.05 * 0.25
+        print('ref earnings', ref_total_earnings, ref_earnings_balance)
+
+    result = send_sol(private_key, OWNER_ADDRESS, owner_fees)
+    return result
 
 
 def start(update: Update, context: CallbackContext) -> None:
@@ -157,11 +170,14 @@ def start(update: Update, context: CallbackContext) -> None:
     args = context.args
 
     if args and args[0].startswith('ref_'):
-        # update.message.reply_text(f'Deep link with ref_ detected! {args[0]}')
+        print(f'Deep link with ref_ detected! {args[0]}')
 
         refferal_username = refcodes[args[0]]
-        if refs[refferal_username] and isinstance(refs[refferal_username], list):
+        print(refferal_username,refs[refferal_username])
+        if isinstance(refs[refferal_username], list):
             refs[refferal_username].append(username)
+            context.user_data['ref_username'] = refferal_username
+            print('refferal username', refferal_username,refs)
 
     public_key, secret_key = create_wallet()
     context.user_data["public_key"] = public_key
@@ -172,7 +188,11 @@ def start(update: Update, context: CallbackContext) -> None:
     ref_code = 'ref_' + generate_random_string(6)
     refcodes[ref_code] = username
     refs[username] = []
+    ref_total_earnings[username] = 0
+    ref_earnings_balance[username] = 0
+
     context.user_data["ref_code"] = ref_code
+
     context.user_data["public_key"] = public_key
 
     # initial settings
@@ -317,12 +337,14 @@ def referrals(update: Update, context: CallbackContext) -> None:
     ref_code = context.user_data.get('ref_code')
 
     keyboard = [
+        [InlineKeyboardButton("Withdraw Refferal Balance", callback_data='ref_withdraw')],
         [InlineKeyboardButton("QR Code", callback_data='qrcode'), InlineKeyboardButton("Close", callback_data='close')]
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     no_of_ref = 0
     message = ''
+    username = ''
 
     if update.message:
         user = update.message.from_user
@@ -334,12 +356,16 @@ def referrals(update: Update, context: CallbackContext) -> None:
         no_of_ref = len(refs[username])
         message = update.callback_query.message
 
+    ref_balance = ref_earnings_balance[username]
+    ref_lifetime_earnings = ref_total_earnings[username]
+
     msg = (
         "*Referrals*\n\n"
         "Refer people to our bot and earn a cool 25% commission LIFETIME on all the fees generated through them.Our top affiliates are making 4-5 figures per month by promoting our bot.Join them now and enjoy passive income for life!\n\n"
         f"Your Referrer link is: `{BOT_LINK}?start={ref_code}`\n\n"
         f"Referrals: *{no_of_ref}*\n\n"
-        "Lifetime commissions earned: *0.00 SOL ($0.00)*\n\n"
+        f"Lifetime commissions earned: *{ref_lifetime_earnings} SOL*\n\n"
+        f"Refferal Earnings Balance To Withdraw: *{ref_balance} SOL*\n\n"
         "All the affiliate commissions are deposited to your Memebot wallet instantly,once your referred customers make a trade.\n\n"
         "Send your family,friends,co-workers or anyone you know to your referrer link and earn 25% commission *lifetime* on all the fees generated through them."
     )
@@ -716,28 +742,73 @@ def handle_withdraw(update: Update, context: CallbackContext) -> None:
     balance = get_wallet_balance(public_key)
     context.user_data["balance"] = balance
 
+    user = update.callback_query.from_user
+    username = user.username
+    ref_balance = ref_earnings_balance[username]
+    print('username', username, 'ref balance', ref_balance)
+
     msg = "⚠️You have under 0.000005 SOL in your account. Please add more to pay the Solana blockchain fee.⚠️"
 
-    if balance > 0.000005:
-        if query.data == 'withdraw_x':
-            public_key = context.user_data.get('public_key')
-            context.user_data['withdraw_type'] = 'partial'
+    if query.data == 'ref_withdraw':
+
+        if ref_balance > 0.000005:
             query.message.reply_text(
-                f"Reply with the amount to withdraw (0 - {balance})"
+                f"Reply with the amount to withdraw (0 - {ref_balance})"
             )
-            return AMOUNT
-        elif query.data == 'withdraw_all':
-            context.user_data['withdraw_type'] = 'all'
+            return REF_AMOUNT
+        elif 0.000005 > balance > 0:
             query.message.reply_text(
-                "Reply with the destination address"
+                msg
             )
-            return ADDRESS
-    elif 0.000005 > balance > 0:
-        query.message.reply_text(
-            msg
-        )
+        else:
+            query.message.reply_text("You have No balance to Withdraw")
     else:
-        query.message.reply_text("You have No balance to Withdraw")
+        if balance > 0.000005:
+            if query.data == 'withdraw_x':
+                public_key = context.user_data.get('public_key')
+                context.user_data['withdraw_type'] = 'partial'
+                query.message.reply_text(
+                    f"Reply with the amount to withdraw (0 - {balance})"
+                )
+                return AMOUNT
+            elif query.data == 'withdraw_all':
+                context.user_data['withdraw_type'] = 'all'
+                query.message.reply_text(
+                    "Reply with the destination address"
+                )
+                return ADDRESS
+        elif 0.000005 > balance > 0:
+            query.message.reply_text(
+                msg
+            )
+        else:
+            query.message.reply_text("You have No balance to Withdraw")
+
+
+def handle_ref_amount(update: Update, context: CallbackContext) -> None:
+    amount = update.message.text
+
+    public_key = context.user_data.get('public_key')
+    user = update.message.from_user
+    username = user.username
+    ref_balance = ref_earnings_balance[username]
+    print(username,ref_balance)
+
+    try:
+        amount = float(amount)
+        if 0 <= amount <= ref_balance:
+            update.message.reply_text(f"Transaction initiated for {amount} SOL to your address ({public_key}).")
+            result = send_sol(config.OWNER_SECRET, public_key, amount)
+
+            if result:
+                ref_earnings_balance[username] = ref_earnings_balance[username] - amount
+                update.message.reply_text(f"Transaction is Successful !\n https://solscan.io/tx/{result}")
+        else:
+            update.message.reply_text(f"Invalid amount. Please enter a value between 0 and {ref_balance}.")
+            return AMOUNT
+    except ValueError:
+        update.message.reply_text("Invalid amount. Please enter a numeric value.")
+        return AMOUNT
 
 
 # Handler for capturing the amount to withdraw
@@ -891,22 +962,24 @@ def handle_message(update: Update, context: CallbackContext):
                 amount = int(autobuy_amt * 1000000000)
                 slippage = int(buy_slip * 100)
 
-                fees_paid = deduct_fees(private_key, SOLONA_ADDRESS, amount)
+                result = asyncio.run(trade(private_key, SOLONA_ADDRESS, address, amount, slippage))
+                print(result)
 
-                if fees_paid:
-                    result = asyncio.run(trade(private_key, SOLONA_ADDRESS, address, amount, slippage))
-                    print(result)
-
-                    if not result['err']:
-                        txid = result['txid']
-                        update.message.reply_text(
-                            f"Swap Successful:\n\nBought {token_details['name']} for {autobuy_amt} SOL  \n\nhttps://solscan.io/tx/{txid}")
-                    elif result['err'] and result['msg'] == '':
-                        update.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
-                    else:
-                        update.message.reply_text(f"Swap Failed! \n\n {result['msg']}")
+                if not result['err']:
+                    txid = result['txid']
+                    update.message.reply_text(
+                        f"Swap Successful:\n\nBought {token_details['name']} for {autobuy_amt} SOL  \n\nhttps://solscan.io/tx/{txid}")
+                elif result['err'] and result['msg'] == '':
+                    update.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
                 else:
-                    update.message.reply_text(f"Swap Failed! \n\n Try again after some time");
+                    update.message.reply_text(f"Swap Failed! \n\n {result['msg']}")
+
+                time.sleep(60)
+                ref_username = context.user_data.get('ref_username', None)
+                fees_paid = deduct_fees(private_key, SOLONA_ADDRESS, amount, ref_username)
+                print(fees_paid)
+
+
 
 
 
@@ -961,44 +1034,44 @@ def handle_sell(update: Update, context: CallbackContext):
 
         query.message.reply_text(f"Initiating SELL of {amount} {tkn_symbol} ")
 
-        fees_paid = deduct_fees(private_key, tkn_address, amount)
+        result = asyncio.run(trade(private_key, tkn_address, SOLONA_ADDRESS, amount, sell_slippage))
+        print(result)
 
-        if fees_paid:
-            result = asyncio.run(trade(private_key, tkn_address, SOLONA_ADDRESS, amount, sell_slippage))
-            print(result)
-
-            if not result['err']:
-                txid = result['txid']
-                query.message.reply_text(
-                    f"Swap Successful:\n\nSold {amount} {tkn_symbol} \n\nhttps://solscan.io/tx/{txid}")
-            elif result['err'] and result['msg'] == '':
-                query.message.reply_text("Swap Failed! change the sell amount or slippage and try again")
-            else:
-                query.message.reply_text(f"Swap Failed! \n\n {result['msg']}")
+        if not result['err']:
+            txid = result['txid']
+            query.message.reply_text(
+                f"Swap Successful:\n\nSold {amount} {tkn_symbol} \n\nhttps://solscan.io/tx/{txid}")
+        elif result['err'] and result['msg'] == '':
+            query.message.reply_text("Swap Failed! change the sell amount or slippage and try again")
         else:
-            query.message.reply_text(f"Swap Failed! \n\n Try again after some time");
+            query.message.reply_text(f"Swap Failed! \n\n {result['msg']}")
+
+        time.sleep(60)
+        ref_username = context.user_data.get('ref_username', None)
+        fees_paid = deduct_fees(private_key, tkn_address, amount, ref_username)
+        print(fees_paid)
 
     elif query.data == 'sell_right':
 
         amount = int(sell_right * tkn_amount)
         query.message.reply_text(f"Initiating SELL of {amount} {tkn_symbol} ")
 
-        fees_paid = deduct_fees(private_key, tkn_address, amount)
+        result = asyncio.run(trade(private_key, tkn_address, SOLONA_ADDRESS, amount, sell_slippage))
+        print(result)
 
-        if fees_paid:
-            result = asyncio.run(trade(private_key, tkn_address, SOLONA_ADDRESS, amount, sell_slippage))
-            print(result)
-
-            if not result['err']:
-                txid = result['txid']
-                query.message.reply_text(
-                    f"Swap Successful:\n\nSold {amount} {tkn_symbol} \n\nhttps://solscan.io/tx/{txid}")
-            elif result['err'] and result['msg'] == '':
-                query.message.reply_text("Swap Failed! change the sell amount or slippage and try again")
-            else:
-                query.message.reply_text(f"Swap Failed! \n\n {result['msg']}")
+        if not result['err']:
+            txid = result['txid']
+            query.message.reply_text(
+                f"Swap Successful:\n\nSold {amount} {tkn_symbol} \n\nhttps://solscan.io/tx/{txid}")
+        elif result['err'] and result['msg'] == '':
+            query.message.reply_text("Swap Failed! change the sell amount or slippage and try again")
         else:
-            query.message.reply_text(f"Swap Failed! \n\n Try again after some time");
+            query.message.reply_text(f"Swap Failed! \n\n {result['msg']}")
+
+        time.sleep(60)
+        ref_username = context.user_data.get('ref_username', None)
+        fees_paid = deduct_fees(private_key, tkn_address, amount, ref_username)
+        print(fees_paid)
 
 
 def handle_buy(update: Update, context: CallbackContext):
@@ -1031,44 +1104,43 @@ def handle_buy(update: Update, context: CallbackContext):
 
             amount = int(buy_left * 1000000000)
 
-            fees_paid = deduct_fees(private_key, SOLONA_ADDRESS, amount)
+            result = asyncio.run(trade(private_key, SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
+            print(result)
 
-            if fees_paid:
-                result = asyncio.run(trade(private_key, SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
-                print(result)
-
-                if not result['err']:
-                    txid = result['txid']
-                    query.message.reply_text(
-                        f"Swap Successful:\n\nBought {tkn_name} for {buy_left} SOL \n\nhttps://solscan.io/tx/{txid}")
-                elif result['err'] and result['msg'] == '':
-                    query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
-                else:
-                    query.message.reply_text(f"Swap Failed! \n\n {result['msg']}")
+            if not result['err']:
+                txid = result['txid']
+                query.message.reply_text(
+                    f"Swap Successful:\n\nBought {tkn_name} for {buy_left} SOL \n\nhttps://solscan.io/tx/{txid}")
+            elif result['err'] and result['msg'] == '':
+                query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
             else:
-                query.message.reply_text(f"Swap Failed! \n\n Try again after some time");
+                query.message.reply_text(f"Swap Failed! \n\n {result['msg']}")
 
+            time.sleep(60)
+            ref_username = context.user_data.get('ref_username', None)
+            fees_paid = deduct_fees(private_key, SOLONA_ADDRESS, amount, ref_username)
+            print(fees_paid)
 
         elif query.data == 'buy_right':
             query.message.reply_text(f"Initiating Buy of {tkn_name} for {buy_right} SOL")
             amount = int(buy_right * 1000000000)
 
-            fees_paid = deduct_fees(private_key, SOLONA_ADDRESS, amount)
+            result = asyncio.run(trade(private_key, SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
+            print(result)
 
-            if fees_paid:
-                result = asyncio.run(trade(private_key, SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
-                print(result)
-
-                if not result['err']:
-                    txid = result['txid']
-                    query.message.reply_text(
-                        f"Swap Successful:\n\nBought {tkn_name} for {buy_right} SOL \n\nhttps://solscan.io/tx/{txid}")
-                elif result['err'] and result['msg'] == '':
-                    query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
-                else:
-                    query.message.reply_text(f"Swap Failed! \n\n {result['msg']}")
+            if not result['err']:
+                txid = result['txid']
+                query.message.reply_text(
+                    f"Swap Successful:\n\nBought {tkn_name} for {buy_right} SOL \n\nhttps://solscan.io/tx/{txid}")
+            elif result['err'] and result['msg'] == '':
+                query.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
             else:
-                query.message.reply_text(f"Swap Failed! \n\n Try again after some time");
+                query.message.reply_text(f"Swap Failed! \n\n {result['msg']}")
+
+            time.sleep(60)
+            ref_username = context.user_data.get('ref_username', None)
+            fees_paid = deduct_fees(private_key, SOLONA_ADDRESS, amount, ref_username)
+            print(fees_paid)
 
 
 def handle_buyx(update: Update, context: CallbackContext):
@@ -1089,22 +1161,22 @@ def handle_buyx(update: Update, context: CallbackContext):
             update.message.reply_text(f"Initiating Buy of {tkn_name} for {buy_x} SOL")
             amount = int(buy_x * 1000000000)
 
-            fees_paid = deduct_fees(private_key, SOLONA_ADDRESS, amount)
+            result = asyncio.run(trade(private_key, SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
+            print(result)
 
-            if fees_paid:
-                result = asyncio.run(trade(private_key, SOLONA_ADDRESS, tkn_address, amount, buy_slippage))
-                print(result)
-
-                if not result['err']:
-                    txid = result['txid']
-                    update.message.reply_text(
-                        f"Swap Successful:\n\nBought {tkn_name} for {buy_x} SOL \n\nhttps://solscan.io/tx/{txid}")
-                elif result['err'] and result['msg'] == '':
-                    update.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
-                else:
-                    update.message.reply_text(f"Swap Failed! \n\n {result['msg']}")
+            if not result['err']:
+                txid = result['txid']
+                update.message.reply_text(
+                    f"Swap Successful:\n\nBought {tkn_name} for {buy_x} SOL \n\nhttps://solscan.io/tx/{txid}")
+            elif result['err'] and result['msg'] == '':
+                update.message.reply_text("Swap Failed! change the buy amount or slippage and try again")
             else:
-                update.message.reply_text(f"Swap Failed! \n\n Try again after some time");
+                update.message.reply_text(f"Swap Failed! \n\n {result['msg']}")
+
+            time.sleep(60)
+            ref_username = context.user_data.get('ref_username', None)
+            fees_paid = deduct_fees(private_key, SOLONA_ADDRESS, amount, ref_username)
+            print(fees_paid)
 
             return ConversationHandler.END
 
@@ -1137,22 +1209,22 @@ def handle_sellx(update: Update, context: CallbackContext):
             amount = int(sell_x * tkn_amount)
             update.message.reply_text(f"Initiating SELL of {amount} {tkn_symbol} ")
 
-            fees_paid = deduct_fees(private_key, tkn_address, amount)
+            result = asyncio.run(trade(private_key, tkn_address, SOLONA_ADDRESS, amount, sell_slippage))
+            print(result)
 
-            if fees_paid:
-                result = asyncio.run(trade(private_key, tkn_address, SOLONA_ADDRESS, amount, sell_slippage))
-                print(result)
-
-                if not result['err']:
-                    txid = result['txid']
-                    update.message.reply_text(
-                        f"Swap Successful:\n\nSold {amount} {tkn_symbol} \n\nhttps://solscan.io/tx/{txid}")
-                elif result['err'] and result['msg'] == '':
-                    update.message.reply_text("Swap Failed! change the sell amount or slippage and try again")
-                else:
-                    update.message.reply_text(f"Swap Failed! \n\n {result['msg']}")
+            if not result['err']:
+                txid = result['txid']
+                update.message.reply_text(
+                    f"Swap Successful:\n\nSold {amount} {tkn_symbol} \n\nhttps://solscan.io/tx/{txid}")
+            elif result['err'] and result['msg'] == '':
+                update.message.reply_text("Swap Failed! change the sell amount or slippage and try again")
             else:
-                update.message.reply_text(f"Swap Failed! \n\n Try again after some time");
+                update.message.reply_text(f"Swap Failed! \n\n {result['msg']}")
+
+            time.sleep(60)
+            ref_username = context.user_data.get('ref_username', None)
+            fees_paid = deduct_fees(private_key, tkn_address, amount, ref_username)
+            print(fees_paid)
 
             return ConversationHandler.END
 
@@ -1324,10 +1396,11 @@ def main() -> None:
     dp.add_handler(CallbackQueryHandler(change_settings_button, pattern=r'^(toggle|toggle2|priority|mev_protect)$'))
 
     withdraw_conv_handler = ConversationHandler(
-        entry_points=[CallbackQueryHandler(handle_withdraw, pattern='^withdraw_x$|^withdraw_all$')],
+        entry_points=[CallbackQueryHandler(handle_withdraw, pattern='^withdraw_x$|^withdraw_all$|^ref_withdraw$')],
         states={
             AMOUNT: [MessageHandler(Filters.text & ~Filters.command, handle_amount)],
             ADDRESS: [MessageHandler(Filters.text & ~Filters.command, handle_address)],
+            REF_AMOUNT: [MessageHandler(Filters.text & ~Filters.command, handle_ref_amount)]
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
