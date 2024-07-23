@@ -18,23 +18,29 @@ def create_wallet():
     secret_key = keypair.private_key
     print(public_key, secret_key)
 
-    return public_key, str(secret_key)
+    return str(public_key), str(secret_key)
 
     # return "3RQ1yB5MZMf5WCed9TyDEbpZLA9ZHMBqNPqKP5QTxSQJ", "4ebYS83MWMV3FjQNfdNCYKAyPuujyQnTuhGX8j4v8E5hPhDEau3aqRvRiL9oMStoi29CfjpXsUp32HpARQpvZUve"
     # return "8v7Dk3F9LGxcYDUxwAAiSjxqB6zP1J1fegLcSThCkEGC", "5t8RF51xjnjBv1zxtEK6T6tzFd4zBdYqed9qHCHhmUPWEKXDwuwX5bxNnmFiNfLgUHxX6s4o7b7iwSr6SzE2gMpp"
-    #return "H8UfvQKjifLY9WJJ7sxdUWJF1txtrgW13k4bGS3Jf2gp", "caMzMckjmJxSUAHXgsjJPx9WvwbQXbYGwjixyyZvb2qgo3cvzLv3pdX8hVFpwAgteZGHD2A8Az5CPYvJ2xd32Ux"
+    # return "H8UfvQKjifLY9WJJ7sxdUWJF1txtrgW13k4bGS3Jf2gp", "caMzMckjmJxSUAHXgsjJPx9WvwbQXbYGwjixyyZvb2qgo3cvzLv3pdX8hVFpwAgteZGHD2A8Az5CPYvJ2xd32Ux"
 
 
 def get_wallet_balance(public_key_str):
-    public_key = PublicKey(public_key_str)
-    balance = client.get_balance(public_key)
-    print(balance)
-    balance_sol = balance / 1000000000
+    try:
+        print()
+        public_key = PublicKey(public_key_str)
+        balance = client.get_balance(public_key)
+        print(balance)
+        balance_sol = balance / 1000000000
 
-    return balance_sol
+        return balance_sol
+    except Exception as e:
+        print("Error fetching balance", e)
+        return 0
 
 
 def get_token_balance(public_key_str):
+    print("args----", public_key_str)
     token_balances = []
 
     headers = {"Content-Type": "application/json"}
@@ -57,7 +63,7 @@ def get_token_balance(public_key_str):
         }
 
         result = requests.post(url, headers=headers, data=json.dumps(payload))
-        # print(result.json())
+        print(result.json())
 
         value = result.json()["result"]["value"]
         print(value)
@@ -76,7 +82,7 @@ def get_token_balance(public_key_str):
         return token_balances
 
     except Exception as e:
-        print(e)
+        print("Error fetching Token Balances Error", e)
         return None
 
 
