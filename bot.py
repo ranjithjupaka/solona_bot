@@ -19,6 +19,15 @@ import config
 import qrcode
 from io import BytesIO
 
+from pymongo import MongoClient
+
+import config
+
+client = MongoClient(config.DB_URL)
+# print(client)
+db = client["solona_bot_db"]
+users_collection = db["users"]
+
 # Enable logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -172,25 +181,39 @@ def start(update: Update, context: CallbackContext) -> None:
     userid = user.id
     username = user.username
     print(username, userid)
-    print(user_keys.get(userid))
+
+    user_details = users_collection.find_one({"user_id": userid})
+    print(user_details)
 
     args = context.args
 
-    if not user_keys.get(userid) and args and args[0].startswith('ref_'):
+    if not user_details and args and args[0].startswith('ref_'):
         print(f'Deep link with ref_ detected! {args[0]}')
 
-        refferal_id = refcodes[args[0]]
-        print(refferal_id, refs[refferal_id])
-        if isinstance(refs[refferal_id], list):
-            refs[refferal_id].append(userid)
-            context.user_data['ref_userid'] = refferal_id
-            print('refferal userid', refferal_id, refs)
+        refferal_details = users_collection.find_one({"ref_code": args[0]})
+        refferal_id = refferal_details["user_id"]
+        print(refferal_details, refferal_id)
+        ref_refferals = refferal_details["refferals"]
+        ref_refferals.append(userid)
+        print(ref_refferals,"ref_refferals")
+
+        result = users_collection.update_one(
+            {"ref_code": args[0]},
+            {"$set": {"refferals": ref_refferals}}
+        )
+
+        print(result)
+
+        refs[refferal_id] = ref_refferals
+        refs[userid] = []
+        context.user_data['ref_userid'] = refferal_id
+        print('refferal userid', refferal_id, refs)
 
     public_key = ''
     secret_key = ''
     ref_code = ''
 
-    if not user_keys.get(userid):
+    if not user_details:
         public_key, secret_key = create_wallet()
         user_keys[userid] = [public_key, secret_key]
         ref_code = 'ref_' + generate_random_string(6)
@@ -198,14 +221,19 @@ def start(update: Update, context: CallbackContext) -> None:
         refs[userid] = []
         ref_total_earnings[userid] = 0
         ref_earnings_balance[userid] = 0
-    else:
-        public_key = user_keys[userid][0]
-        secret_key = user_keys[userid][1]
 
-        for key in refcodes.keys():
-            if refcodes[key] == userid:
-                ref_code = key
-                break
+        users_collection.insert_one(
+            {"user_id": userid, "public_key": public_key, "private_key": secret_key, "ref_code": ref_code,
+             "refferals": [],
+             "ref_lifetime": 0, "ref_balance": 0})
+    else:
+        public_key = user_details["public_key"]
+        secret_key = user_details["private_key"]
+        ref_code = user_details["ref_code"]
+        refs[userid] = user_details["refferals"]
+        ref_total_earnings[userid] = user_details["ref_lifetime"]
+        ref_earnings_balance[userid] = user_details["ref_balance"]
+        print("user exists", user_details)
 
     context.user_data["public_key"] = public_key
     context.user_data["private_key"] = secret_key
